@@ -113,4 +113,63 @@ class PhysicsEngineTest {
         assertFalse("Expected high-speed fragmentation", event!!.isMerge)
         assertTrue("Expected mass loss > 5%", event.massLossPercent > 5.0)
     }
+
+    @Test
+    fun detonateBodyTriggersSupernovaOrFragments() {
+        val engine = PhysicsEngine()
+        val star = CelestialBody(
+            id = 1L, name = "Звезда-А", type = BodyType.STAR, textureStyle = TextureStyle.SUN,
+            massKg = PhysicsUnits.SUN_MASS_KG, radiusM = PhysicsUnits.SUN_RADIUS_M,
+            x = 0.0, y = 0.0, vx = 0.0, vy = 0.0,
+            luminosityW = PhysicsUnits.SUN_LUMINOSITY_W,
+            primaryColorArgb = 0xFFFFD54F.toInt(), secondaryColorArgb = 0xFFFF8F00.toInt()
+        )
+        val planet = CelestialBody(
+            id = 2L, name = "Мир", type = BodyType.PLANET, textureStyle = TextureStyle.EARTH,
+            massKg = PhysicsUnits.EARTH_MASS_KG, radiusM = PhysicsUnits.EARTH_RADIUS_M,
+            x = PhysicsUnits.AU_METERS, y = 0.0, vx = 0.0, vy = 29_780.0,
+            primaryColorArgb = 0xFF2563EB.toInt(), secondaryColorArgb = 0xFF10B981.toInt()
+        )
+        engine.loadBodies(listOf(star, planet), initialTimeScale = 1.0, startPaused = false)
+        engine.detonateBody(1L)
+
+        val afterSupernova = engine.snapshot.value
+        assertTrue("Expected supernova debris particles", afterSupernova.particleCount >= 20)
+        val remnant = afterSupernova.bodies.first { it.id == 1L }
+        assertEquals(TextureStyle.NEUTRON_STAR, remnant.textureStyle)
+        assertNotNull(engine.lastCollision.value)
+        assertTrue(engine.lastCollision.value!!.title.contains("Сверхновая"))
+
+        engine.detonateBody(2L)
+        val afterPlanetBomb = engine.snapshot.value
+        assertEquals(1, afterPlanetBomb.heavyBodyCount)
+    }
+
+    @Test
+    fun rocheLimitDisruptsPlanetNearBlackHole() {
+        val engine = PhysicsEngine()
+        val bh = CelestialBody(
+            id = 1L, name = "ЧД", type = BodyType.BLACK_HOLE, textureStyle = TextureStyle.BLACK_HOLE,
+            massKg = PhysicsUnits.SUN_MASS_KG * 5.0, radiusM = 2.0e8,
+            x = 0.0, y = 0.0, vx = 0.0, vy = 0.0,
+            primaryColorArgb = 0xFF000000.toInt(), secondaryColorArgb = 0xFF34D399.toInt()
+        )
+        val planet = CelestialBody(
+            id = 2L, name = "Обречённая", type = BodyType.PLANET, textureStyle = TextureStyle.EARTH,
+            massKg = PhysicsUnits.EARTH_MASS_KG, radiusM = PhysicsUnits.EARTH_RADIUS_M,
+            x = 6.0e8, y = 0.0, vx = 0.0, vy = 100_000.0,
+            primaryColorArgb = 0xFF2563EB.toInt(), secondaryColorArgb = 0xFF10B981.toInt()
+        )
+        engine.loadBodies(listOf(bh, planet), initialTimeScale = 10.0, startPaused = false)
+        engine.start()
+        Thread.sleep(200)
+        engine.stop()
+
+        val snap = engine.snapshot.value
+        assertEquals(1, snap.heavyBodyCount)
+        assertTrue("Expected tidal debris fragments", snap.particleCount > 0)
+        val event = engine.lastCollision.value
+        assertNotNull(event)
+        assertTrue(event!!.title.contains("Предел Роша"))
+    }
 }

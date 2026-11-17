@@ -16,6 +16,7 @@ enum class TextureStyle {
     RED_GIANT,
     BLUE_STAR,
     WHITE_DWARF,
+    NEUTRON_STAR,
     MERCURY,
     VENUS,
     EARTH,

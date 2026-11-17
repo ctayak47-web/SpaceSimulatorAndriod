@@ -5,10 +5,10 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 
 private val SpaceDarkColorScheme = darkColorScheme(
-    primary = ElectricBlue,
-    onPrimary = SpaceWhite,
-    primaryContainer = ElectricBlueContainer,
-    onPrimaryContainer = ElectricBlueBright,
+    primary = EmeraldAccent,
+    onPrimary = SpaceBlack,
+    primaryContainer = EmeraldContainer,
+    onPrimaryContainer = EmeraldBright,
     secondary = OrbitalCyan,
     onSecondary = SpaceBlack,
     secondaryContainer = SpaceSurfaceElevated,

@@ -10,64 +10,116 @@ import kotlin.math.sin
 import kotlin.math.sqrt
 import kotlin.random.Random
 
+enum class ScenarioCategory(val titleRu: String) {
+    ALL("Все"),
+    SYSTEMS("Системы"),
+    CATASTROPHES("Катастрофы"),
+    EXPERIMENTS("Эксперименты")
+}
+
 // Готовые катастрофы, песочница и эксперименты одной кнопкой
 enum class ScenarioType(
     val titleRu: String,
     val descriptionRu: String,
+    val category: ScenarioCategory,
     val defaultTimeScale: Double,
     val defaultZoomMetersPerHalfScreen: Double
 ) {
     SOLAR_SYSTEM(
         titleRu = "Солнечная система",
         descriptionRu = "Реальные массы, орбиты, спутники, пояс астероидов и кометы",
+        category = ScenarioCategory.SYSTEMS,
         defaultTimeScale = 120_000.0,
         defaultZoomMetersPerHalfScreen = PhysicsUnits.AU_METERS * 2.4
     ),
     EMPTY_SANDBOX(
         titleRu = "Пустая песочница",
         descriptionRu = "Чистый космос: создавайте свои звёзды, планеты и чёрные дыры",
+        category = ScenarioCategory.EXPERIMENTS,
         defaultTimeScale = 100_000.0,
         defaultZoomMetersPerHalfScreen = PhysicsUnits.AU_METERS * 2.0
     ),
     MERCURY_HITS_EARTH(
         titleRu = "Меркурий врезается в Землю",
         descriptionRu = "Лобовое столкновение Меркурия с Землёй на космической скорости",
+        category = ScenarioCategory.CATASTROPHES,
         defaultTimeScale = 8_000.0,
         defaultZoomMetersPerHalfScreen = PhysicsUnits.AU_METERS * 0.09
     ),
     MOON_FALLS_ON_EARTH(
         titleRu = "Луна падает на Землю",
         descriptionRu = "Луна теряет орбитальную скорость и обрушивается на Землю",
+        category = ScenarioCategory.CATASTROPHES,
         defaultTimeScale = 6_000.0,
         defaultZoomMetersPerHalfScreen = 4.6e8
+    ),
+    EARTH_RINGS(
+        titleRu = "Земля с кольцами Сатурна",
+        descriptionRu = "Вокруг Земли вращается кольцо из 90 ледяных обломков и Луна",
+        category = ScenarioCategory.EXPERIMENTS,
+        defaultTimeScale = 4_500.0,
+        defaultZoomMetersPerHalfScreen = 5.2e8
+    ),
+    BINARY_STAR_TATOOINE(
+        titleRu = "Двойная звезда Татуин",
+        descriptionRu = "Две орбитальные звезды и планеты в общей обитаемой зоне",
+        category = ScenarioCategory.SYSTEMS,
+        defaultTimeScale = 160_000.0,
+        defaultZoomMetersPerHalfScreen = PhysicsUnits.AU_METERS * 2.6
+    ),
+    THREE_BODY_CHAOS(
+        titleRu = "Задача трёх тел",
+        descriptionRu = "Три звезды в хаотическом гравитационном танце и обречённая планета",
+        category = ScenarioCategory.EXPERIMENTS,
+        defaultTimeScale = 180_000.0,
+        defaultZoomMetersPerHalfScreen = PhysicsUnits.AU_METERS * 2.8
+    ),
+    BLUE_SUPERGIANT_SYSTEM(
+        titleRu = "Система голубого сверхгиганта",
+        descriptionRu = "Сверхгорячая звезда 8 M☉ с раскалёнными лавовыми и газовыми мирами",
+        category = ScenarioCategory.SYSTEMS,
+        defaultTimeScale = 90_000.0,
+        defaultZoomMetersPerHalfScreen = PhysicsUnits.AU_METERS * 3.8
+    ),
+    ROGUE_PLANET_NIBIRU(
+        titleRu = "Планета-странник в системе",
+        descriptionRu = "Ледяной супергигант 12 M⊕ пересекает внутреннюю Солнечную систему",
+        category = ScenarioCategory.CATASTROPHES,
+        defaultTimeScale = 220_000.0,
+        defaultZoomMetersPerHalfScreen = PhysicsUnits.AU_METERS * 2.5
     ),
     SUN_DISAPPEARS(
         titleRu = "Солнце исчезает",
         descriptionRu = "Звезда мгновенно пропадает — планеты срываются с орбит и замерзают",
+        category = ScenarioCategory.CATASTROPHES,
         defaultTimeScale = 450_000.0,
         defaultZoomMetersPerHalfScreen = PhysicsUnits.AU_METERS * 3.2
     ),
     SUN_RED_GIANT(
         titleRu = "Солнце — красный гигант",
         descriptionRu = "Раздувшаяся звезда поглощает внутренние планеты и сжигает Землю",
+        category = ScenarioCategory.CATASTROPHES,
         defaultTimeScale = 180_000.0,
         defaultZoomMetersPerHalfScreen = PhysicsUnits.AU_METERS * 2.2
     ),
     SECOND_JUPITER(
         titleRu = "Второй Юпитер в системе",
         descriptionRu = "Второй газовый гигант на 1.85 а.е. разрушает стабильность орбит",
+        category = ScenarioCategory.EXPERIMENTS,
         defaultTimeScale = 600_000.0,
         defaultZoomMetersPerHalfScreen = PhysicsUnits.AU_METERS * 3.5
     ),
     BLACK_HOLE_FLYBY(
         titleRu = "Чёрная дыра пролетает рядом",
         descriptionRu = "Сверхплотный объект 4.5 M☉ проносится сквозь Солнечную систему",
+        category = ScenarioCategory.CATASTROPHES,
         defaultTimeScale = 350_000.0,
         defaultZoomMetersPerHalfScreen = PhysicsUnits.AU_METERS * 3.2
     ),
     GALAXY_COLLISION(
         titleRu = "Столкновение двух галактик",
         descriptionRu = "Два звёздных диска сближаются и образуют приливные рукава",
+        category = ScenarioCategory.CATASTROPHES,
         defaultTimeScale = 450_000.0,
         defaultZoomMetersPerHalfScreen = PhysicsUnits.AU_METERS * 18.0
     )
@@ -138,6 +190,12 @@ object ScenarioRepository {
                     focusBodyId = earth.id
                 )
             }
+
+            ScenarioType.EARTH_RINGS -> buildEarthRingsScenario(type)
+            ScenarioType.BINARY_STAR_TATOOINE -> buildBinaryStarScenario(type)
+            ScenarioType.THREE_BODY_CHAOS -> buildThreeBodyScenario(type)
+            ScenarioType.BLUE_SUPERGIANT_SYSTEM -> buildBlueSupergiantScenario(type)
+            ScenarioType.ROGUE_PLANET_NIBIRU -> buildRoguePlanetScenario(type)
 
             ScenarioType.SUN_DISAPPEARS -> {
                 val bodies = SolarSystemFactory.createSolarSystem(includeSun = false)
@@ -213,7 +271,7 @@ object ScenarioRepository {
                         baseTempK = 0.0,
                         surfaceTempK = 0.0,
                         primaryColorArgb = 0xFF000000.toInt(),
-                        secondaryColorArgb = 0xFF60A5FA.toInt()
+                        secondaryColorArgb = 0xFF34D399.toInt()
                     )
                 )
                 ScenarioSetup(
@@ -227,6 +285,282 @@ object ScenarioRepository {
 
             ScenarioType.GALAXY_COLLISION -> buildGalaxyCollisionScenario(type)
         }
+    }
+
+    private fun buildEarthRingsScenario(type: ScenarioType): ScenarioSetup {
+        val list = ArrayList<CelestialBody>(105)
+        var nextId = 1L
+        val earth = CelestialBody(
+            id = nextId++,
+            name = "Земля",
+            type = BodyType.PLANET,
+            textureStyle = TextureStyle.EARTH,
+            massKg = PhysicsUnits.EARTH_MASS_KG,
+            radiusM = PhysicsUnits.EARTH_RADIUS_M,
+            x = 0.0, y = 0.0, vx = 0.0, vy = 0.0,
+            baseTempK = 285.0,
+            surfaceTempK = 285.0,
+            atmosphereFraction = 1.0,
+            greenhouseOffsetK = 33.0,
+            primaryColorArgb = 0xFF2563EB.toInt(),
+            secondaryColorArgb = 0xFF10B981.toInt()
+        )
+        list.add(earth)
+
+        val moonDist = 3.844e8
+        val moonV = sqrt(PhysicsUnits.G_SI * (earth.massKg + 7.342e22) / moonDist)
+        list.add(
+            CelestialBody(
+                id = nextId++,
+                name = "Луна",
+                type = BodyType.MOON,
+                textureStyle = TextureStyle.MOON,
+                massKg = 7.342e22,
+                radiusM = 1.7374e6,
+                x = moonDist, y = 0.0, vx = 0.0, vy = moonV,
+                baseTempK = 250.0, surfaceTempK = 250.0,
+                primaryColorArgb = 0xFFD1D5DB.toInt(),
+                secondaryColorArgb = 0xFF9CA3AF.toInt()
+            )
+        )
+
+        val rng = Random(77)
+        for (i in 0 until 90) {
+            val r = rng.nextDouble(2.4e7, 7.6e7)
+            val ang = rng.nextDouble(0.0, 2.0 * PI)
+            val v = sqrt(PhysicsUnits.G_SI * earth.massKg / r)
+            val isIce = rng.nextFloat() < 0.55f
+            list.add(
+                CelestialBody(
+                    id = nextId++,
+                    name = "Обломок кольца #${i + 1}",
+                    type = BodyType.ASTEROID,
+                    textureStyle = if (isIce) TextureStyle.COMET else TextureStyle.ASTEROID,
+                    massKg = 2.0e14,
+                    radiusM = rng.nextDouble(1.8e5, 4.5e5),
+                    x = r * cos(ang), y = r * sin(ang),
+                    vx = -v * sin(ang), vy = v * cos(ang),
+                    baseTempK = 195.0, surfaceTempK = 195.0,
+                    primaryColorArgb = if (isIce) 0xFFA7F3D0.toInt() else 0xFFD1D5DB.toInt(),
+                    secondaryColorArgb = 0xFF6B7280.toInt(),
+                    isLightweight = true,
+                    trail = null
+                )
+            )
+        }
+
+        return ScenarioSetup(
+            bodies = list,
+            timeScale = type.defaultTimeScale,
+            cameraCenterX = 0.0,
+            cameraCenterY = 0.0,
+            halfWidthMeters = type.defaultZoomMetersPerHalfScreen,
+            focusBodyId = earth.id
+        )
+    }
+
+    private fun buildBinaryStarScenario(type: ScenarioType): ScenarioSetup {
+        val list = ArrayList<CelestialBody>(12)
+        var nextId = 1L
+
+        val m1 = PhysicsUnits.SUN_MASS_KG * 1.15
+        val m2 = PhysicsUnits.SUN_MASS_KG * 0.85
+        val totalM = m1 + m2
+        val sep = PhysicsUnits.AU_METERS * 0.34
+        val r1 = sep * (m2 / totalM)
+        val r2 = sep * (m1 / totalM)
+        val omega = sqrt(PhysicsUnits.G_SI * totalM / (sep * sep * sep))
+
+        list.add(
+            CelestialBody(
+                id = nextId++, name = "Тату I", type = BodyType.STAR, textureStyle = TextureStyle.SUN,
+                massKg = m1, radiusM = PhysicsUnits.SUN_RADIUS_M * 1.05,
+                x = -r1, y = 0.0, vx = 0.0, vy = -omega * r1,
+                baseTempK = 6050.0, surfaceTempK = 6050.0, luminosityW = PhysicsUnits.SUN_LUMINOSITY_W * 1.35,
+                primaryColorArgb = 0xFFFFD54F.toInt(), secondaryColorArgb = 0xFFFF8F00.toInt()
+            )
+        )
+        list.add(
+            CelestialBody(
+                id = nextId++, name = "Тату II", type = BodyType.STAR, textureStyle = TextureStyle.RED_GIANT,
+                massKg = m2, radiusM = PhysicsUnits.SUN_RADIUS_M * 0.85,
+                x = r2, y = 0.0, vx = 0.0, vy = omega * r2,
+                baseTempK = 4350.0, surfaceTempK = 4350.0, luminosityW = PhysicsUnits.SUN_LUMINOSITY_W * 0.45,
+                primaryColorArgb = 0xFFFF7043.toInt(), secondaryColorArgb = 0xFFD84315.toInt()
+            )
+        )
+
+        fun addCircumbinary(
+            name: String, style: TextureStyle, massKg: Double, radiusM: Double,
+            distAu: Double, angle: Double, tempK: Double, atmo: Double,
+            c1: Int, c2: Int, rings: Boolean = false
+        ) {
+            val r = distAu * PhysicsUnits.AU_METERS
+            val v = sqrt(PhysicsUnits.G_SI * totalM / r)
+            list.add(
+                CelestialBody(
+                    id = nextId++, name = name, type = BodyType.PLANET, textureStyle = style,
+                    massKg = massKg, radiusM = radiusM,
+                    x = r * cos(angle), y = r * sin(angle),
+                    vx = -v * sin(angle), vy = v * cos(angle),
+                    baseTempK = tempK, surfaceTempK = tempK, atmosphereFraction = atmo,
+                    primaryColorArgb = c1, secondaryColorArgb = c2, hasRings = rings
+                )
+            )
+        }
+
+        addCircumbinary("Татуин", TextureStyle.MARS, PhysicsUnits.EARTH_MASS_KG * 1.1, PhysicsUnits.EARTH_RADIUS_M * 1.04, 1.35, 0.4, 318.0, 0.85, 0xFFE6C27A.toInt(), 0xFFB45309.toInt())
+        addCircumbinary("Изумрудия", TextureStyle.EARTH, PhysicsUnits.EARTH_MASS_KG * 1.8, PhysicsUnits.EARTH_RADIUS_M * 1.2, 2.05, 2.4, 275.0, 1.0, 0xFF10B981.toInt(), 0xFF0284C7.toInt())
+        addCircumbinary("Хот", TextureStyle.URANUS, PhysicsUnits.EARTH_MASS_KG * 6.5, PhysicsUnits.EARTH_RADIUS_M * 2.3, 3.4, 4.7, 130.0, 0.9, 0xFF67E8F9.toInt(), 0xFF0E7490.toInt(), rings = true)
+
+        return ScenarioSetup(
+            bodies = list,
+            timeScale = type.defaultTimeScale,
+            cameraCenterX = 0.0, cameraCenterY = 0.0,
+            halfWidthMeters = type.defaultZoomMetersPerHalfScreen
+        )
+    }
+
+    private fun buildThreeBodyScenario(type: ScenarioType): ScenarioSetup {
+        val list = ArrayList<CelestialBody>(6)
+        var nextId = 1L
+        val au = PhysicsUnits.AU_METERS
+        val starMass = PhysicsUnits.SUN_MASS_KG * 1.1
+
+        val angles = listOf(0.0, 2.0 * PI / 3.0, 4.0 * PI / 3.0)
+        val radius = au * 1.05
+        val orbitalV = sqrt(PhysicsUnits.G_SI * starMass / (sqrt(3.0) * radius)) * 0.92
+        val styles = listOf(TextureStyle.SUN, TextureStyle.BLUE_STAR, TextureStyle.RED_GIANT)
+        val names = listOf("Альфа", "Бета", "Проксима")
+        val colors = listOf(0xFFFFD54F.toInt(), 0xFF60A5FA.toInt(), 0xFFFF7043.toInt())
+
+        for (k in 0..2) {
+            val a = angles[k]
+            val jitter = if (k == 1) 1.08 else 1.0
+            list.add(
+                CelestialBody(
+                    id = nextId++,
+                    name = names[k],
+                    type = BodyType.STAR,
+                    textureStyle = styles[k],
+                    massKg = starMass * (if (k == 2) 0.85 else 1.0),
+                    radiusM = PhysicsUnits.SUN_RADIUS_M,
+                    x = radius * cos(a) * jitter,
+                    y = radius * sin(a),
+                    vx = -orbitalV * sin(a) * (if (k == 0) 0.95 else 1.03),
+                    vy = orbitalV * cos(a),
+                    baseTempK = 5800.0,
+                    surfaceTempK = 5800.0,
+                    luminosityW = PhysicsUnits.SUN_LUMINOSITY_W,
+                    primaryColorArgb = colors[k],
+                    secondaryColorArgb = 0xFFFFFFFF.toInt()
+                )
+            )
+        }
+
+        list.add(
+            CelestialBody(
+                id = nextId++,
+                name = "Трисолярис",
+                type = BodyType.PLANET,
+                textureStyle = TextureStyle.EARTH,
+                massKg = PhysicsUnits.EARTH_MASS_KG * 1.4,
+                radiusM = PhysicsUnits.EARTH_RADIUS_M * 1.1,
+                x = 0.0, y = au * 0.25,
+                vx = 28_000.0, vy = 8_000.0,
+                baseTempK = 310.0, surfaceTempK = 310.0, atmosphereFraction = 1.0,
+                primaryColorArgb = 0xFF34D399.toInt(), secondaryColorArgb = 0xFF047857.toInt()
+            )
+        )
+
+        return ScenarioSetup(
+            bodies = list,
+            timeScale = type.defaultTimeScale,
+            cameraCenterX = 0.0, cameraCenterY = 0.0,
+            halfWidthMeters = type.defaultZoomMetersPerHalfScreen
+        )
+    }
+
+    private fun buildBlueSupergiantScenario(type: ScenarioType): ScenarioSetup {
+        val list = ArrayList<CelestialBody>(8)
+        var nextId = 1L
+        val starMass = PhysicsUnits.SUN_MASS_KG * 8.0
+        list.add(
+            CelestialBody(
+                id = nextId++,
+                name = "Ригель-А",
+                type = BodyType.STAR,
+                textureStyle = TextureStyle.BLUE_STAR,
+                massKg = starMass,
+                radiusM = PhysicsUnits.SUN_RADIUS_M * 3.8,
+                x = 0.0, y = 0.0, vx = 0.0, vy = 0.0,
+                baseTempK = 18_500.0, surfaceTempK = 18_500.0,
+                luminosityW = PhysicsUnits.SUN_LUMINOSITY_W * 1200.0,
+                primaryColorArgb = 0xFF60A5FA.toInt(),
+                secondaryColorArgb = 0xFF2DD4BF.toInt()
+            )
+        )
+
+        fun addExo(name: String, style: TextureStyle, mE: Double, rE: Double, distAu: Double, ang: Double, tempK: Double, c1: Int, c2: Int, rings: Boolean = false) {
+            val r = distAu * PhysicsUnits.AU_METERS
+            val v = sqrt(PhysicsUnits.G_SI * starMass / r)
+            list.add(
+                CelestialBody(
+                    id = nextId++, name = name, type = BodyType.PLANET, textureStyle = style,
+                    massKg = PhysicsUnits.EARTH_MASS_KG * mE,
+                    radiusM = PhysicsUnits.EARTH_RADIUS_M * rE,
+                    x = r * cos(ang), y = r * sin(ang),
+                    vx = -v * sin(ang), vy = v * cos(ang),
+                    baseTempK = tempK, surfaceTempK = tempK, atmosphereFraction = 0.8,
+                    primaryColorArgb = c1, secondaryColorArgb = c2, hasRings = rings
+                )
+            )
+        }
+
+        addExo("Мустафар", TextureStyle.LAVA_WORLD, 2.2, 1.3, 0.75, 0.3, 2400.0, 0xFFFF5722.toInt(), 0xFF7F1D1D.toInt())
+        addExo("Горячий Юпитер", TextureStyle.JUPITER, 420.0, 12.0, 1.45, 2.1, 1450.0, 0xFFF59E0B.toInt(), 0xFFDC2626.toInt())
+        addExo("Синий Гигант-2", TextureStyle.NEPTUNE, 45.0, 4.5, 2.6, 4.1, 680.0, 0xFF38BDF8.toInt(), 0xFF1D4ED8.toInt(), rings = true)
+        addExo("Элизиум", TextureStyle.EARTH, 1.6, 1.15, 4.1, 5.4, 340.0, 0xFF10B981.toInt(), 0xFF0284C7.toInt())
+
+        return ScenarioSetup(
+            bodies = list,
+            timeScale = type.defaultTimeScale,
+            cameraCenterX = 0.0, cameraCenterY = 0.0,
+            halfWidthMeters = type.defaultZoomMetersPerHalfScreen
+        )
+    }
+
+    private fun buildRoguePlanetScenario(type: ScenarioType): ScenarioSetup {
+        val bodies = SolarSystemFactory.createSolarSystem().toMutableList()
+        val maxId = bodies.maxOf { it.id }
+        bodies.add(
+            CelestialBody(
+                id = maxId + 1,
+                name = "Нибиру (Странник)",
+                type = BodyType.PLANET,
+                textureStyle = TextureStyle.NEPTUNE,
+                massKg = PhysicsUnits.EARTH_MASS_KG * 12.0,
+                radiusM = PhysicsUnits.EARTH_RADIUS_M * 3.2,
+                x = -PhysicsUnits.AU_METERS * 1.9,
+                y = PhysicsUnits.AU_METERS * 1.35,
+                vx = 48_000.0,
+                vy = -31_000.0,
+                baseTempK = 140.0,
+                surfaceTempK = 140.0,
+                atmosphereFraction = 1.0,
+                primaryColorArgb = 0xFF2DD4BF.toInt(),
+                secondaryColorArgb = 0xFF065F46.toInt(),
+                hasRings = true,
+                ringInnerRatio = 1.4f,
+                ringOuterRatio = 2.1f
+            )
+        )
+        return ScenarioSetup(
+            bodies = bodies,
+            timeScale = type.defaultTimeScale,
+            cameraCenterX = 0.0, cameraCenterY = 0.0,
+            halfWidthMeters = type.defaultZoomMetersPerHalfScreen
+        )
     }
 
     private fun buildGalaxyCollisionScenario(type: ScenarioType): ScenarioSetup {
@@ -258,7 +592,7 @@ object ScenarioRepository {
                 x = c1x, y = c1y, vx = c1vx, vy = c1vy,
                 baseTempK = 0.0, surfaceTempK = 0.0,
                 primaryColorArgb = 0xFF000000.toInt(),
-                secondaryColorArgb = 0xFF60A5FA.toInt()
+                secondaryColorArgb = 0xFF34D399.toInt()
             )
         )
         bodies.add(
@@ -291,7 +625,7 @@ object ScenarioRepository {
                 val color = if (warmPalette) {
                     if (rng.nextFloat() < 0.6f) 0xFFFBBF24.toInt() else 0xFFF97316.toInt()
                 } else {
-                    if (rng.nextFloat() < 0.65f) 0xFF93C5FD.toInt() else 0xFFE0F2FE.toInt()
+                    if (rng.nextFloat() < 0.65f) 0xFF34D399.toInt() else 0xFFA7F3D0.toInt()
                 }
                 bodies.add(
                     CelestialBody(

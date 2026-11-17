@@ -7,16 +7,18 @@ import androidx.compose.ui.graphics.asImageBitmap
 import com.example.physics.TextureStyle
 import kotlin.math.PI
 import kotlin.math.abs
+import kotlin.math.asin
+import kotlin.math.atan2
 import kotlin.math.floor
 import kotlin.math.sin
 import kotlin.math.sqrt
 
-// Генератор программных процедурных текстур (градиенты + 2D FBM шум, без внешних картинок)
+// Генератор программных 3D-сферических процедурных текстур (градиенты + 2D FBM шум)
 object ProceduralTextureCache {
 
-    private const val TEX_SIZE = 96
-    private val bitmapCache = HashMap<TextureStyle, Bitmap>(20)
-    private val composeCache = HashMap<TextureStyle, ImageBitmap>(20)
+    private const val TEX_SIZE = 144
+    private val bitmapCache = HashMap<TextureStyle, Bitmap>(24)
+    private val composeCache = HashMap<TextureStyle, ImageBitmap>(24)
 
     fun getTexture(style: TextureStyle): Bitmap {
         return bitmapCache.getOrPut(style) { generateBitmap(style) }
@@ -44,15 +46,29 @@ object ProceduralTextureCache {
 
                 val r = sqrt(rSq)
                 val nz = sqrt((1.0f - rSq).coerceAtLeast(0f))
-                val light = (0.62f + 0.38f * (-nx * 0.35f - ny * 0.35f + nz * 0.85f)).coerceIn(0.35f, 1.12f)
 
-                val baseColor = sampleSurfaceColor(style, nx, ny, nz, r, seed)
-                val edgeAlpha = ((1.0f - r) * 30f).coerceIn(0f, 1f)
+                // Сферическое отображение координат (долгота и широта)
+                val lon = atan2(nx, nz) / PI.toFloat() * 2.2f
+                val lat = asin(ny.coerceIn(-1f, 1f)) / (PI.toFloat() * 0.5f)
+
+                val limbDarkening = (0.58f + 0.42f * nz).coerceIn(0.42f, 1.05f)
+                val light = (0.68f + 0.34f * (-nx * 0.35f - ny * 0.32f + nz * 0.85f)).coerceIn(0.40f, 1.12f)
+                val shade = (limbDarkening * 0.35f + light * 0.65f).coerceIn(0.38f, 1.12f)
+
+                val baseColor = sampleSurfaceColor(style, nx, ny, nz, lon, lat, r, seed)
+                val edgeAlpha = ((1.0f - r) * 36f).coerceIn(0f, 1f)
                 val finalAlpha = (edgeAlpha * 255f).toInt().coerceIn(0, 255)
 
-                val red = (Color.red(baseColor) * light).toInt().coerceIn(0, 255)
-                val green = (Color.green(baseColor) * light).toInt().coerceIn(0, 255)
-                val blue = (Color.blue(baseColor) * light).toInt().coerceIn(0, 255)
+                val isEmissive = style == TextureStyle.SUN ||
+                    style == TextureStyle.RED_GIANT ||
+                    style == TextureStyle.BLUE_STAR ||
+                    style == TextureStyle.WHITE_DWARF ||
+                    style == TextureStyle.NEUTRON_STAR
+                val finalShade = if (isEmissive) (0.78f + 0.28f * nz) else shade
+
+                val red = (Color.red(baseColor) * finalShade).toInt().coerceIn(0, 255)
+                val green = (Color.green(baseColor) * finalShade).toInt().coerceIn(0, 255)
+                val blue = (Color.blue(baseColor) * finalShade).toInt().coerceIn(0, 255)
                 pixels[py * TEX_SIZE + px] = Color.argb(finalAlpha, red, green, blue)
             }
         }
@@ -65,92 +81,118 @@ object ProceduralTextureCache {
         nx: Float,
         ny: Float,
         nz: Float,
+        lon: Float,
+        lat: Float,
         r: Float,
         seed: Int
     ): Int {
-        val u = nx * 2.8f + nz * 0.5f
-        val v = ny * 2.8f
+        val u = lon * 2.6f
+        val v = lat * 2.4f
         val n1 = fbm(u + 4.1f, v + 2.3f, seed)
-        val n2 = fbm(u * 2.4f - 1.7f, v * 2.4f + 5.1f, seed + 53)
+        val n2 = fbm(u * 2.3f - 1.7f, v * 2.3f + 5.1f, seed + 53)
+        val n3 = fbm(u * 4.5f + 8.3f, v * 4.5f - 2.9f, seed + 109)
 
         return when (style) {
             TextureStyle.SUN -> {
-                val gran = fbm(nx * 5.2f, ny * 5.2f, seed)
+                val gran = fbm(lon * 5.5f, lat * 5.5f, seed)
+                val flare = abs(n3 - 0.5f) * 2f
                 val core = (1.0f - r * 0.55f).coerceIn(0.35f, 1.0f)
-                lerpColor(0xFFFF8F00.toInt(), 0xFFFFF59D.toInt(), (core * 0.75f + gran * 0.35f).coerceIn(0f, 1f))
+                val t = (core * 0.65f + gran * 0.25f + flare * 0.12f).coerceIn(0f, 1f)
+                lerpColor(0xFFFF7A00.toInt(), 0xFFFFF8B0.toInt(), t)
             }
             TextureStyle.RED_GIANT -> {
-                val cell = fbm(nx * 3.8f, ny * 3.8f, seed)
-                lerpColor(0xFFB71C1C.toInt(), 0xFFFF7043.toInt(), cell.coerceIn(0f, 1f))
+                val cell = fbm(lon * 3.4f, lat * 3.4f, seed)
+                val coolSpots = (n2 * 0.6f + cell * 0.4f).coerceIn(0f, 1f)
+                lerpColor(0xFF991B1B.toInt(), 0xFFFF7043.toInt(), coolSpots)
             }
             TextureStyle.BLUE_STAR -> {
-                val gran = fbm(nx * 4.8f, ny * 4.8f, seed)
-                val core = (1.0f - r * 0.5f).coerceIn(0.4f, 1.0f)
-                lerpColor(0xFF2563EB.toInt(), 0xFFE0F2FE.toInt(), (core * 0.7f + gran * 0.35f).coerceIn(0f, 1f))
+                val gran = fbm(lon * 5.0f, lat * 5.0f, seed)
+                val core = (1.0f - r * 0.45f).coerceIn(0.4f, 1.0f)
+                lerpColor(0xFF0EA5E9.toInt(), 0xFFECFDF5.toInt(), (core * 0.72f + gran * 0.32f).coerceIn(0f, 1f))
             }
             TextureStyle.WHITE_DWARF -> {
-                val core = (1.0f - r * 0.4f).coerceIn(0.5f, 1.0f)
-                lerpColor(0xFF93C5FD.toInt(), 0xFFFFFFFF.toInt(), (core * 0.8f + n1 * 0.2f).coerceIn(0f, 1f))
+                val core = (1.0f - r * 0.35f).coerceIn(0.55f, 1.0f)
+                lerpColor(0xFF6EE7B7.toInt(), 0xFFFFFFFF.toInt(), (core * 0.8f + n1 * 0.2f).coerceIn(0f, 1f))
+            }
+            TextureStyle.NEUTRON_STAR -> {
+                val poles = (1f - abs(nx)).coerceIn(0f, 1f) * abs(ny)
+                val base = lerpColor(0xFF047857.toInt(), 0xFF6EE7B7.toInt(), (n1 * 0.6f + (1f - r) * 0.5f).coerceIn(0f, 1f))
+                lerpColor(base, 0xFFF0FDF4.toInt(), (poles * 1.1f).coerceIn(0f, 1f))
             }
             TextureStyle.EARTH -> {
-                val polar = abs(ny) > 0.84f - n2 * 0.08f
-                val continent = n1 * 0.75f + n2 * 0.25f
-                val clouds = fbm(nx * 4.0f + 12f, ny * 3.5f - 7f, seed + 91)
+                val polar = abs(lat) > 0.82f - n2 * 0.09f
+                val continent = n1 * 0.72f + n2 * 0.28f
+                val clouds = fbm(lon * 3.8f + 12f, lat * 3.2f - 7f, seed + 91)
+                val specular = ((1f - abs(nx + 0.25f) - abs(ny + 0.25f)) * 1.4f).coerceIn(0f, 0.38f)
                 val surface = when {
                     polar -> 0xFFF1F5F9.toInt()
-                    continent > 0.53f -> {
-                        val desert = (continent - 0.53f) * 3.2f
-                        lerpColor(0xFF16A34A.toInt(), 0xFFA16207.toInt(), desert.coerceIn(0f, 1f))
+                    continent > 0.52f -> {
+                        val relief = ((continent - 0.52f) * 3.4f).coerceIn(0f, 1f)
+                        val forest = lerpColor(0xFF059669.toInt(), 0xFF65A30D.toInt(), n3)
+                        lerpColor(forest, 0xFFB45309.toInt(), relief)
                     }
-                    else -> lerpColor(0xFF1E3A8A.toInt(), 0xFF2563EB.toInt(), (continent / 0.53f).coerceIn(0f, 1f))
+                    else -> {
+                        val depth = (continent / 0.52f).coerceIn(0f, 1f)
+                        val ocean = lerpColor(0xFF0F2942.toInt(), 0xFF0EA5E9.toInt(), depth)
+                        lerpColor(ocean, 0xFF6EE7B7.toInt(), specular * 0.45f)
+                    }
                 }
-                if (clouds > 0.60f) {
-                    lerpColor(surface, 0xFFFFFFFF.toInt(), ((clouds - 0.60f) * 2.1f).coerceIn(0f, 0.8f))
+                if (clouds > 0.58f) {
+                    lerpColor(surface, 0xFFFFFFFF.toInt(), ((clouds - 0.58f) * 2.2f).coerceIn(0f, 0.86f))
                 } else surface
             }
             TextureStyle.JUPITER -> {
-                val band = sin((ny * 10.5f + n1 * 1.4f) * PI.toFloat()) * 0.5f + 0.5f
-                val stormDist = sqrt((nx - 0.28f) * (nx - 0.28f) * 1.5f + (ny - 0.22f) * (ny - 0.22f) * 3.5f)
-                val base = lerpColor(0xFF9A5B32.toInt(), 0xFFF3DEC0.toInt(), (band * 0.78f + n2 * 0.22f).coerceIn(0f, 1f))
-                if (stormDist < 0.22f) lerpColor(base, 0xFFDC2626.toInt(), (1f - stormDist / 0.22f) * 0.85f) else base
+                val turb = (n1 - 0.5f) * 1.35f + (n3 - 0.5f) * 0.45f
+                val band = sin((lat * 9.5f + turb) * PI.toFloat()) * 0.5f + 0.5f
+                val stormDist = sqrt((nx - 0.26f) * (nx - 0.26f) * 1.4f + (ny - 0.20f) * (ny - 0.20f) * 3.6f)
+                val darkBelt = lerpColor(0xFF8C4A27.toInt(), 0xFFD99B66.toInt(), n2)
+                val base = lerpColor(darkBelt, 0xFFF7E7CE.toInt(), (band * 0.82f + n2 * 0.18f).coerceIn(0f, 1f))
+                if (stormDist < 0.23f) lerpColor(base, 0xFFDC2626.toInt(), (1f - stormDist / 0.23f) * 0.9f) else base
             }
             TextureStyle.SATURN -> {
-                val band = sin((ny * 8.5f + n1 * 0.6f) * PI.toFloat()) * 0.5f + 0.5f
-                lerpColor(0xFFB5925B.toInt(), 0xFFF3E2B8.toInt(), (band * 0.7f + n2 * 0.3f).coerceIn(0f, 1f))
+                val band = sin((lat * 8.5f + n1 * 0.55f) * PI.toFloat()) * 0.5f + 0.5f
+                lerpColor(0xFFA68451.toInt(), 0xFFF5E6C4.toInt(), (band * 0.72f + n2 * 0.28f).coerceIn(0f, 1f))
             }
             TextureStyle.MARS -> {
-                val cap = abs(ny) > 0.89f
+                val cap = abs(lat) > 0.88f
                 if (cap) 0xFFF8FAFC.toInt()
-                else lerpColor(0xFF7C2D12.toInt(), 0xFFEA580C.toInt(), (n1 * 0.65f + n2 * 0.35f).coerceIn(0f, 1f))
+                else {
+                    val basin = (n1 * 0.65f + n2 * 0.35f).coerceIn(0f, 1f)
+                    lerpColor(0xFF6B2410.toInt(), 0xFFEA580C.toInt(), basin)
+                }
             }
             TextureStyle.VENUS -> {
-                val swirl = sin((ny * 4.5f + n1 * 2.5f) * PI.toFloat()) * 0.5f + 0.5f
-                lerpColor(0xFFC28E3A.toInt(), 0xFFFDE68A.toInt(), swirl.coerceIn(0f, 1f))
+                val swirl = sin((lat * 4.5f + lon * 1.2f + n1 * 2.6f) * PI.toFloat()) * 0.5f + 0.5f
+                lerpColor(0xFFB47D2D.toInt(), 0xFFFEF08A.toInt(), (swirl * 0.8f + n2 * 0.2f).coerceIn(0f, 1f))
             }
             TextureStyle.MERCURY, TextureStyle.MOON -> {
                 val crater = abs(n2 - 0.5f) * 2.0f
-                lerpColor(0xFF52525B.toInt(), 0xFFD4D4D8.toInt(), (n1 * 0.6f + crater * 0.4f).coerceIn(0f, 1f))
+                val maria = n1
+                val base = lerpColor(0xFF3F3F46.toInt(), 0xFFD4D4D8.toInt(), (maria * 0.65f + crater * 0.35f).coerceIn(0f, 1f))
+                if (n3 > 0.72f) lerpColor(base, 0xFFF4F4F5.toInt(), 0.35f) else base
             }
             TextureStyle.URANUS -> {
-                val band = sin((ny * 3.5f + n1 * 0.4f) * PI.toFloat()) * 0.5f + 0.5f
-                lerpColor(0xFF06B6D4.toInt(), 0xFFA5F3FC.toInt(), band.coerceIn(0f, 1f))
+                val band = sin((lat * 3.8f + n1 * 0.4f) * PI.toFloat()) * 0.5f + 0.5f
+                lerpColor(0xFF0D9488.toInt(), 0xFFA7F3D0.toInt(), band.coerceIn(0f, 1f))
             }
             TextureStyle.NEPTUNE -> {
-                val band = sin((ny * 6.0f + n1 * 1.1f) * PI.toFloat()) * 0.5f + 0.5f
-                lerpColor(0xFF1E40AF.toInt(), 0xFF60A5FA.toInt(), (band * 0.75f + n2 * 0.25f).coerceIn(0f, 1f))
+                val band = sin((lat * 6.5f + n1 * 1.15f) * PI.toFloat()) * 0.5f + 0.5f
+                lerpColor(0xFF1E3A8A.toInt(), 0xFF38BDF8.toInt(), (band * 0.75f + n2 * 0.25f).coerceIn(0f, 1f))
             }
             TextureStyle.PLUTO -> {
                 val heart = sqrt((nx - 0.1f) * (nx - 0.1f) + (ny - 0.05f) * (ny - 0.05f))
-                val base = lerpColor(0xFF785A40.toInt(), 0xFFD6C2AA.toInt(), n1.coerceIn(0f, 1f))
-                if (heart < 0.34f) lerpColor(base, 0xFFF5EBE0.toInt(), (1f - heart / 0.34f) * 0.7f) else base
+                val base = lerpColor(0xFF6D4C3D.toInt(), 0xFFD6C2AA.toInt(), n1.coerceIn(0f, 1f))
+                if (heart < 0.34f) lerpColor(base, 0xFFF5EBE0.toInt(), (1f - heart / 0.34f) * 0.78f) else base
             }
             TextureStyle.LAVA_WORLD -> {
                 val crack = abs(n2 - 0.5f) * 2.0f
-                if (crack < 0.24f) lerpColor(0xFFFFF59D.toInt(), 0xFFFF5722.toInt(), crack / 0.24f)
-                else lerpColor(0xFF271310.toInt(), 0xFF7F1D1D.toInt(), n1.coerceIn(0f, 1f))
+                val microCrack = abs(n3 - 0.5f) * 2.0f
+                val minCrack = minOf(crack, microCrack * 1.3f)
+                if (minCrack < 0.23f) lerpColor(0xFFFFF9C4.toInt(), 0xFFFF5722.toInt(), minCrack / 0.23f)
+                else lerpColor(0xFF1C0D0A.toInt(), 0xFF6B1D1D.toInt(), n1.coerceIn(0f, 1f))
             }
-            TextureStyle.COMET -> lerpColor(0xFF0284C7.toInt(), 0xFFE0F2FE.toInt(), n1.coerceIn(0f, 1f))
-            TextureStyle.ASTEROID -> lerpColor(0xFF44403C.toInt(), 0xFFA8A29E.toInt(), (n1 * 0.5f + n2 * 0.5f).coerceIn(0f, 1f))
+            TextureStyle.COMET -> lerpColor(0xFF0D9488.toInt(), 0xFFCCFBF1.toInt(), n1.coerceIn(0f, 1f))
+            TextureStyle.ASTEROID -> lerpColor(0xFF44403C.toInt(), 0xFFA8A29E.toInt(), (n1 * 0.55f + n2 * 0.45f).coerceIn(0f, 1f))
             TextureStyle.BLACK_HOLE -> 0xFF000000.toInt()
         }
     }

@@ -1,13 +1,13 @@
 package com.example.ui
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -55,20 +55,26 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import com.example.R
 import com.example.physics.BodyType
 import com.example.physics.PhysicsUnits
 import com.example.scenarios.CustomBodyDraft
 import com.example.scenarios.SandboxPreset
+import com.example.scenarios.ScenarioCategory
 import com.example.scenarios.ScenarioType
 import com.example.storage.SavedSceneMetadata
 import com.example.ui.theme.AlertRed
-import com.example.ui.theme.ElectricBlue
-import com.example.ui.theme.ElectricBlueBright
-import com.example.ui.theme.ElectricBlueContainer
+import com.example.ui.theme.EmeraldAccent
+import com.example.ui.theme.EmeraldBright
+import com.example.ui.theme.EmeraldContainer
+import com.example.ui.theme.SolarAmber
 import com.example.ui.theme.SpaceBlack
 import com.example.ui.theme.SpaceBorder
 import com.example.ui.theme.SpaceMutedText
@@ -86,45 +92,102 @@ fun ScenariosDialog(
     onSelectScenario: (ScenarioType) -> Unit,
     onDismiss: () -> Unit
 ) {
-    ModalContainer(title = "Сценарии и песочница", onDismiss = onDismiss) {
-        LazyColumn(
-            modifier = Modifier.heightIn(max = 440.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            items(ScenarioType.entries) { scenario ->
-                Surface(
-                    shape = RoundedCornerShape(14.dp),
-                    color = SpaceSurfaceElevated,
-                    border = BorderStroke(1.dp, SpaceBorder),
+    var selectedCategory by remember { mutableStateOf(ScenarioCategory.ALL) }
+    val filteredScenarios = remember(selectedCategory) {
+        if (selectedCategory == ScenarioCategory.ALL) ScenarioType.entries
+        else ScenarioType.entries.filter { it.category == selectedCategory }
+    }
+
+    ModalContainer(title = "Сценарии и катастрофы", onDismiss = onDismiss) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(106.dp)
+                    .clip(RoundedCornerShape(14.dp))
+            ) {
+                Image(
+                    painter = painterResource(id = R.drawable.img_scenarios_hero),
+                    contentDescription = "Космические эксперименты и катастрофы",
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.matchParentSize()
+                )
+                Box(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 56.dp)
-                        .clip(RoundedCornerShape(14.dp))
-                        .clickable { onSelectScenario(scenario) }
-                        .testTag("scenario_${scenario.name.lowercase()}")
-                ) {
-                    Row(
-                        modifier = Modifier.padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.AutoAwesome,
-                            contentDescription = null,
-                            tint = ElectricBlueBright,
-                            modifier = Modifier.size(22.dp)
+                        .matchParentSize()
+                        .background(
+                            Brush.verticalGradient(
+                                listOf(Color.Transparent, SpaceBlack.copy(alpha = 0.85f))
+                            )
                         )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = scenario.titleRu,
-                                style = MaterialTheme.typography.titleMedium,
-                                color = SpaceWhite
+                )
+                Text(
+                    text = "${ScenarioType.entries.size} сценариев · гравитация N тел",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = EmeraldBright,
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .padding(horizontal = 12.dp, vertical = 8.dp)
+                )
+            }
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                ScenarioCategory.entries.forEach { cat ->
+                    CategoryChip(cat.titleRu, selectedCategory == cat) {
+                        selectedCategory = cat
+                    }
+                }
+            }
+
+            LazyColumn(
+                modifier = Modifier.heightIn(max = 360.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(filteredScenarios) { scenario ->
+                    val accent = when (scenario.category) {
+                        ScenarioCategory.CATASTROPHES -> SolarAmber
+                        ScenarioCategory.EXPERIMENTS -> EmeraldBright
+                        else -> EmeraldAccent
+                    }
+                    Surface(
+                        shape = RoundedCornerShape(14.dp),
+                        color = SpaceSurfaceElevated,
+                        border = BorderStroke(1.dp, SpaceBorder),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 56.dp)
+                            .clip(RoundedCornerShape(14.dp))
+                            .clickable { onSelectScenario(scenario) }
+                            .testTag("scenario_${scenario.name.lowercase()}")
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.AutoAwesome,
+                                contentDescription = null,
+                                tint = accent,
+                                modifier = Modifier.size(22.dp)
                             )
-                            Text(
-                                text = scenario.descriptionRu,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = SpaceMutedText
-                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = scenario.titleRu,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    color = SpaceWhite
+                                )
+                                Text(
+                                    text = scenario.descriptionRu,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = SpaceMutedText
+                                )
+                            }
                         }
                     }
                 }
@@ -165,7 +228,6 @@ fun SandboxBuilderDialog(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            // Фильтр категорий
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -180,7 +242,6 @@ fun SandboxBuilderDialog(
                 CategoryChip("Кометы", filterCategory == BodyType.COMET) { filterCategory = BodyType.COMET }
             }
 
-            // Горизонтальная лента шаблонов
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -191,8 +252,8 @@ fun SandboxBuilderDialog(
                     val selected = draft.preset == preset
                     Surface(
                         shape = RoundedCornerShape(14.dp),
-                        color = if (selected) ElectricBlueContainer else SpaceSurfaceElevated,
-                        border = BorderStroke(1.dp, if (selected) ElectricBlue else SpaceBorder),
+                        color = if (selected) EmeraldContainer else SpaceSurfaceElevated,
+                        border = BorderStroke(1.dp, if (selected) EmeraldAccent else SpaceBorder),
                         modifier = Modifier
                             .width(155.dp)
                             .clip(RoundedCornerShape(14.dp))
@@ -227,7 +288,6 @@ fun SandboxBuilderDialog(
                 }
             }
 
-            // Название объекта
             OutlinedTextField(
                 value = draft.name,
                 onValueChange = { txt -> onUpdateDraft { it.copy(name = txt) } },
@@ -237,20 +297,19 @@ fun SandboxBuilderDialog(
                     .fillMaxWidth()
                     .testTag("custom_body_name_input"),
                 colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = ElectricBlue,
+                    focusedBorderColor = EmeraldAccent,
                     unfocusedBorderColor = SpaceBorder,
                     focusedTextColor = SpaceWhite,
                     unfocusedTextColor = SpaceWhite,
-                    focusedLabelColor = ElectricBlueBright,
+                    focusedLabelColor = EmeraldBright,
                     unfocusedLabelColor = SpaceMutedText
                 )
             )
 
-            // Ползунок массы
             Column {
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text("Масса", style = MaterialTheme.typography.bodyMedium, color = SpaceMutedText)
-                    Text(PhysicsUnits.formatMass(draft.massKg), style = MaterialTheme.typography.labelMedium, color = ElectricBlueBright)
+                    Text(PhysicsUnits.formatMass(draft.massKg), style = MaterialTheme.typography.labelMedium, color = EmeraldBright)
                 }
                 Slider(
                     value = massSlider,
@@ -259,15 +318,14 @@ fun SandboxBuilderDialog(
                         onUpdateDraft { it.copy(massKg = newM) }
                     },
                     modifier = Modifier.fillMaxWidth().height(34.dp),
-                    colors = SliderDefaults.colors(thumbColor = ElectricBlueBright, activeTrackColor = ElectricBlue, inactiveTrackColor = SpaceBorder)
+                    colors = SliderDefaults.colors(thumbColor = EmeraldBright, activeTrackColor = EmeraldAccent, inactiveTrackColor = SpaceBorder)
                 )
             }
 
-            // Ползунок радиуса
             Column {
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text("Радиус", style = MaterialTheme.typography.bodyMedium, color = SpaceMutedText)
-                    Text(PhysicsUnits.formatRadius(draft.radiusM), style = MaterialTheme.typography.labelMedium, color = ElectricBlueBright)
+                    Text(PhysicsUnits.formatRadius(draft.radiusM), style = MaterialTheme.typography.labelMedium, color = EmeraldBright)
                 }
                 Slider(
                     value = radSlider,
@@ -276,11 +334,10 @@ fun SandboxBuilderDialog(
                         onUpdateDraft { it.copy(radiusM = newR) }
                     },
                     modifier = Modifier.fillMaxWidth().height(34.dp),
-                    colors = SliderDefaults.colors(thumbColor = ElectricBlueBright, activeTrackColor = ElectricBlue, inactiveTrackColor = SpaceBorder)
+                    colors = SliderDefaults.colors(thumbColor = EmeraldBright, activeTrackColor = EmeraldAccent, inactiveTrackColor = SpaceBorder)
                 )
             }
 
-            // Вычисляемая плотность + кольца
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -298,7 +355,7 @@ fun SandboxBuilderDialog(
                         Switch(
                             checked = draft.hasRings,
                             onCheckedChange = { checked -> onUpdateDraft { it.copy(hasRings = checked) } },
-                            colors = SwitchDefaults.colors(checkedThumbColor = SpaceWhite, checkedTrackColor = ElectricBlue)
+                            colors = SwitchDefaults.colors(checkedThumbColor = SpaceBlack, checkedTrackColor = EmeraldAccent)
                         )
                     }
                 }
@@ -310,7 +367,7 @@ fun SandboxBuilderDialog(
                     .fillMaxWidth()
                     .heightIn(min = 50.dp)
                     .testTag("launch_custom_body_button"),
-                colors = ButtonDefaults.buttonColors(containerColor = ElectricBlue, contentColor = SpaceWhite)
+                colors = ButtonDefaults.buttonColors(containerColor = EmeraldAccent, contentColor = SpaceBlack)
             ) {
                 Text("Разместить и задать скорость стрелкой →")
             }
@@ -326,8 +383,8 @@ private fun CategoryChip(title: String, selected: Boolean, onClick: () -> Unit) 
         label = { Text(title) },
         modifier = Modifier.heightIn(min = 40.dp),
         colors = FilterChipDefaults.filterChipColors(
-            selectedContainerColor = ElectricBlueContainer,
-            selectedLabelColor = ElectricBlueBright,
+            selectedContainerColor = EmeraldContainer,
+            selectedLabelColor = EmeraldBright,
             containerColor = SpaceSurfaceElevated,
             labelColor = SpaceMutedText
         ),
@@ -335,7 +392,7 @@ private fun CategoryChip(title: String, selected: Boolean, onClick: () -> Unit) 
             enabled = true,
             selected = selected,
             borderColor = SpaceBorder,
-            selectedBorderColor = ElectricBlue
+            selectedBorderColor = EmeraldAccent
         )
     )
 }
@@ -358,7 +415,7 @@ fun MyScenesDialog(
                     .fillMaxWidth()
                     .heightIn(min = 48.dp)
                     .testTag("save_current_scene_button"),
-                colors = ButtonDefaults.buttonColors(containerColor = ElectricBlue, contentColor = SpaceWhite)
+                colors = ButtonDefaults.buttonColors(containerColor = EmeraldAccent, contentColor = SpaceBlack)
             ) {
                 Icon(Icons.Default.Save, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(8.dp))
@@ -372,12 +429,22 @@ fun MyScenesDialog(
                     border = BorderStroke(1.dp, SpaceBorder),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text(
-                        text = "Сохранённых сцен пока нет. Создайте эксперимент и нажмите «Сохранить текущую сцену».",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = SpaceMutedText,
-                        modifier = Modifier.padding(16.dp)
-                    )
+                    Column {
+                        Image(
+                            painter = painterResource(id = R.drawable.img_onboarding_cosmos),
+                            contentDescription = null,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(88.dp)
+                        )
+                        Text(
+                            text = "Сохранённых сцен пока нет. Создайте эксперимент и нажмите «Сохранить текущую сцену».",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = SpaceMutedText,
+                            modifier = Modifier.padding(14.dp)
+                        )
+                    }
                 }
             } else {
                 LazyColumn(
@@ -418,9 +485,9 @@ fun MyScenesDialog(
                                 OutlinedButton(
                                     onClick = { onLoadScene(scene.id) },
                                     modifier = Modifier.heightIn(min = 48.dp),
-                                    contentPadding = PaddingValues(horizontal = 12.dp),
-                                    border = BorderStroke(1.dp, ElectricBlue),
-                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = ElectricBlueBright)
+                                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp),
+                                    border = BorderStroke(1.dp, EmeraldAccent),
+                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = EmeraldBright)
                                 ) {
                                     Text("Открыть")
                                 }
@@ -462,11 +529,11 @@ fun SaveSceneNameDialog(
                     .fillMaxWidth()
                     .testTag("scene_name_input"),
                 colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = ElectricBlue,
+                    focusedBorderColor = EmeraldAccent,
                     unfocusedBorderColor = SpaceBorder,
                     focusedTextColor = SpaceWhite,
                     unfocusedTextColor = SpaceWhite,
-                    focusedLabelColor = ElectricBlueBright,
+                    focusedLabelColor = EmeraldBright,
                     unfocusedLabelColor = SpaceMutedText
                 )
             )
@@ -486,7 +553,7 @@ fun SaveSceneNameDialog(
                     modifier = Modifier
                         .heightIn(min = 48.dp)
                         .testTag("confirm_save_scene_button"),
-                    colors = ButtonDefaults.buttonColors(containerColor = ElectricBlue, contentColor = SpaceWhite)
+                    colors = ButtonDefaults.buttonColors(containerColor = EmeraldAccent, contentColor = SpaceBlack)
                 ) {
                     Text("Сохранить")
                 }
@@ -499,6 +566,7 @@ fun SaveSceneNameDialog(
 fun LayersDialog(
     settings: VisualSettings,
     onToggleGrid: () -> Unit,
+    onToggleGravityGrid: () -> Unit,
     onToggleTrails: () -> Unit,
     onToggleLabels: () -> Unit,
     onToggleHabitableZone: () -> Unit,
@@ -508,6 +576,7 @@ fun LayersDialog(
     ModalContainer(title = "Визуализация", onDismiss = onDismiss) {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             LayerToggleRow("Сетка расстояний", settings.showGrid, onToggleGrid, "toggle_grid")
+            LayerToggleRow("Искривление сетки гравитацией", settings.showGravityGrid, onToggleGravityGrid, "toggle_gravity_grid")
             LayerToggleRow("Следы орбит", settings.showTrails, onToggleTrails, "toggle_trails")
             LayerToggleRow("Подписи тел", settings.showLabels, onToggleLabels, "toggle_labels")
             LayerToggleRow("Зона обитаемости звёзд", settings.showHabitableZone, onToggleHabitableZone, "toggle_habitable")
@@ -544,8 +613,8 @@ private fun LayerToggleRow(
                 checked = checked,
                 onCheckedChange = { onToggle() },
                 colors = SwitchDefaults.colors(
-                    checkedThumbColor = SpaceWhite,
-                    checkedTrackColor = ElectricBlue,
+                    checkedThumbColor = SpaceBlack,
+                    checkedTrackColor = EmeraldAccent,
                     uncheckedThumbColor = SpaceMutedText,
                     uncheckedTrackColor = SpaceBlack
                 )
@@ -567,13 +636,13 @@ fun OnboardingOverlay(
             Icons.Default.TouchApp
         )
         1 -> Triple(
-            "2 / 3 · Время и параметры",
-            "Внизу расположены пауза (0×), реверс и логарифмический ползунок ускорения до 1 млн раз. Для выбранной планеты можно менять массу, радиус и скорость прямо на лету.",
+            "2 / 3 · Время и катастрофы",
+            "Внизу расположены пауза (0×), реверс и логарифмический ползунок ускорения до 1 млн раз. В панели выбранного тела можно менять массу, радиус и даже взорвать звезду как сверхновую!",
             Icons.Default.Brightness7
         )
         else -> Triple(
-            "3 / 3 · Песочница и катастрофы",
-            "Нажмите «+», соберите собственную звезду, планету с кольцами или чёрную дыру и задайте вектор скорости пальцем. Или откройте «Сценарии» для катастроф в один клик!",
+            "3 / 3 · Песочница и сценарии",
+            "Нажмите «+», соберите собственную звезду, пульсар, планету с кольцами или чёрную дыру. Или откройте «Сценарии» с 14 готовыми космическими экспериментами!",
             Icons.Default.AutoAwesome
         )
     }
@@ -591,74 +660,98 @@ fun OnboardingOverlay(
                 .testTag("onboarding_card"),
             shape = RoundedCornerShape(22.dp),
             color = SpaceSurface.copy(alpha = 0.96f),
-            border = BorderStroke(1.dp, ElectricBlue)
+            border = BorderStroke(1.dp, EmeraldAccent)
         ) {
-            Column(
-                modifier = Modifier.padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Surface(
-                        shape = CircleShape,
-                        color = ElectricBlueContainer,
-                        modifier = Modifier.size(44.dp)
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                imageVector = icon,
-                                contentDescription = null,
-                                tint = ElectricBlueBright,
-                                modifier = Modifier.size(24.dp)
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(112.dp)
+                ) {
+                    Image(
+                        painter = painterResource(id = R.drawable.img_onboarding_cosmos),
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.matchParentSize()
+                    )
+                    Box(
+                        modifier = Modifier
+                            .matchParentSize()
+                            .background(
+                                Brush.verticalGradient(
+                                    listOf(Color.Transparent, SpaceSurface.copy(alpha = 0.95f))
+                                )
                             )
-                        }
-                    }
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Text(
-                        text = title,
-                        style = MaterialTheme.typography.titleLarge,
-                        color = SpaceWhite
                     )
                 }
 
-                Text(
-                    text = body,
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = SpaceMutedText
-                )
-
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    for (i in 0..2) {
-                        Box(
-                            modifier = Modifier
-                                .height(6.dp)
-                                .width(if (i == step) 24.dp else 10.dp)
-                                .clip(CircleShape)
-                                .background(if (i == step) ElectricBlueBright else SpaceBorder)
+                Column(
+                    modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 20.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Surface(
+                            shape = CircleShape,
+                            color = EmeraldContainer,
+                            modifier = Modifier.size(44.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = icon,
+                                    contentDescription = null,
+                                    tint = EmeraldBright,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(
+                            text = title,
+                            style = MaterialTheme.typography.titleLarge,
+                            color = SpaceWhite
                         )
                     }
-                }
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    TextButton(
-                        onClick = onSkip,
-                        modifier = Modifier
-                            .heightIn(min = 48.dp)
-                            .testTag("onboarding_skip_button")
-                    ) {
-                        Text("Пропустить", color = SpaceMutedText)
+                    Text(
+                        text = body,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = SpaceMutedText
+                    )
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        for (i in 0..2) {
+                            Box(
+                                modifier = Modifier
+                                    .height(6.dp)
+                                    .width(if (i == step) 24.dp else 10.dp)
+                                    .clip(CircleShape)
+                                    .background(if (i == step) EmeraldBright else SpaceBorder)
+                            )
+                        }
                     }
-                    Button(
-                        onClick = onNext,
-                        modifier = Modifier
-                            .heightIn(min = 48.dp)
-                            .testTag("onboarding_next_button"),
-                        colors = ButtonDefaults.buttonColors(containerColor = ElectricBlue, contentColor = SpaceWhite)
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(if (step < 2) "Далее" else "Начать")
+                        TextButton(
+                            onClick = onSkip,
+                            modifier = Modifier
+                                .heightIn(min = 48.dp)
+                                .testTag("onboarding_skip_button")
+                        ) {
+                            Text("Пропустить", color = SpaceMutedText)
+                        }
+                        Button(
+                            onClick = onNext,
+                            modifier = Modifier
+                                .heightIn(min = 48.dp)
+                                .testTag("onboarding_next_button"),
+                            colors = ButtonDefaults.buttonColors(containerColor = EmeraldAccent, contentColor = SpaceBlack)
+                        ) {
+                            Text(if (step < 2) "Далее" else "Начать")
+                        }
                     }
                 }
             }

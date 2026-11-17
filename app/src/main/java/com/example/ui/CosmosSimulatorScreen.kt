@@ -30,7 +30,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.example.ui.theme.ElectricBlue
+import com.example.ui.theme.EmeraldAccent
 import com.example.ui.theme.SpaceBlack
 import com.example.ui.theme.SpaceSurface
 import com.example.ui.theme.SpaceWhite
@@ -129,7 +129,7 @@ fun CosmosSimulatorScreen(
                         Surface(
                             shape = RoundedCornerShape(14.dp),
                             color = SpaceSurface.copy(alpha = 0.94f),
-                            border = BorderStroke(1.dp, ElectricBlue),
+                            border = BorderStroke(1.dp, EmeraldAccent),
                             modifier = Modifier.align(Alignment.CenterHorizontally)
                         ) {
                             Text(
@@ -156,13 +156,14 @@ fun CosmosSimulatorScreen(
                         isFollowing = uiState.camera.followBodyId == telemetry.id,
                         onToggleFollow = { viewModel.toggleFollowSelected(telemetry.id) },
                         onCenter = { viewModel.centerOnBody(telemetry.id, zoomIfFar = true) },
+                        onDetonate = { viewModel.detonateBody(telemetry.id) },
                         onDelete = { viewModel.deleteBody(telemetry.id) },
                         onClose = viewModel::deselectBody,
                         onMassChange = { newMass -> viewModel.updateSelectedMass(telemetry.id, newMass) },
                         onRadiusChange = { newRadius -> viewModel.updateSelectedRadius(telemetry.id, newRadius) },
                         onScaleVelocity = { factor -> viewModel.scaleSelectedVelocity(telemetry.id, factor) },
                         onToggleRings = { viewModel.toggleSelectedRings(telemetry.id) },
-                        modifier = Modifier.heightIn(max = 335.dp)
+                        modifier = Modifier.heightIn(max = 350.dp)
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                 }
@@ -220,6 +221,7 @@ fun CosmosSimulatorScreen(
         ActiveModal.LAYERS -> LayersDialog(
             settings = uiState.visualSettings,
             onToggleGrid = viewModel::toggleGrid,
+            onToggleGravityGrid = viewModel::toggleGravityGrid,
             onToggleTrails = viewModel::toggleTrails,
             onToggleLabels = viewModel::toggleLabels,
             onToggleHabitableZone = viewModel::toggleHabitableZone,

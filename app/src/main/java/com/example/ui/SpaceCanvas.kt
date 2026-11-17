@@ -102,6 +102,7 @@ fun SpaceCanvas(
             camera = camera,
             selectedBodyId = snapshot.selectedTelemetry?.id,
             showGrid = visualSettings.showGrid,
+            showGravityGrid = visualSettings.showGravityGrid,
             showTrails = visualSettings.showTrails,
             showLabels = visualSettings.showLabels,
             showHabitableZone = visualSettings.showHabitableZone,

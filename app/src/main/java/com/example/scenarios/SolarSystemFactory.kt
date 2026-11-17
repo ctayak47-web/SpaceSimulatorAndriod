@@ -50,6 +50,12 @@ enum class SandboxPreset(
         PhysicsUnits.SUN_MASS_KG * 1.1, PhysicsUnits.EARTH_RADIUS_M * 1.1, 14000.0, PhysicsUnits.SUN_LUMINOSITY_W * 0.02, 0.0,
         0xFFE0F2FE.toInt(), 0xFF93C5FD.toInt()
     ),
+    PULSAR(
+        "Пульсар", "1.8 M☉ · нейтронный маяк",
+        BodyType.STAR, TextureStyle.NEUTRON_STAR,
+        PhysicsUnits.SUN_MASS_KG * 1.8, 2.2e7, 28000.0, PhysicsUnits.SUN_LUMINOSITY_W * 0.2, 0.0,
+        0xFF6EE7B7.toInt(), 0xFF2DD4BF.toInt()
+    ),
     ROCKY_PLANET(
         "Каменистая планета", "1.5 M⊕ · с атмосферой",
         BodyType.PLANET, TextureStyle.EARTH,

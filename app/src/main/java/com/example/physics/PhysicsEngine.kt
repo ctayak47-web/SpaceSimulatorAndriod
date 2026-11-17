@@ -292,6 +292,138 @@ class PhysicsEngine {
         }
     }
 
+    // Принудительная детонация тела / Сверхновая звезды (Universe Sandbox)
+    fun detonateBody(bodyId: Long) {
+        synchronized(lock) {
+            val idx = heavyBodies.indexOfFirst { it.id == bodyId }
+            if (idx < 0) return
+            val target = heavyBodies[idx]
+            val cx = target.x
+            val cy = target.y
+            val cvx = target.vx
+            val cvy = target.vy
+            val r = target.radiusM
+            val m = target.massKg
+
+            when (target.type) {
+                BodyType.STAR -> {
+                    val isCompact = target.textureStyle == TextureStyle.WHITE_DWARF ||
+                        target.textureStyle == TextureStyle.NEUTRON_STAR
+                    val ejectSpeed = if (isCompact) 420_000.0 else 240_000.0
+                    spawnDebrisLocked(
+                        x = cx,
+                        y = cy,
+                        baseVx = cvx,
+                        baseVy = cvy,
+                        parentRadiusM = max(r * 1.4, 3.0e8),
+                        ejectSpeed = ejectSpeed,
+                        count = 28,
+                        hotColor = 0xFF34D399.toInt()
+                    )
+                    spawnFlashLocked(cx, cy, max(r * 12.0, PhysicsUnits.AU_METERS * 1.4), 0xFF34D399.toInt(), true)
+                    spawnFlashLocked(cx, cy, max(r * 7.5, PhysicsUnits.AU_METERS * 0.7), 0xFFFFF59D.toInt(), false)
+
+                    // Нагрев и ударная волна по ближайшим телам
+                    for (other in heavyBodies) {
+                        if (other.id == target.id || other.type == BodyType.BLACK_HOLE) continue
+                        val dx = other.x - cx
+                        val dy = other.y - cy
+                        val dist = sqrt(max(1.0e12, dx * dx + dy * dy))
+                        val heatBoost = (6500.0 * (PhysicsUnits.AU_METERS / dist).pow(1.4)).coerceIn(40.0, 8200.0)
+                        other.surfaceTempK = (other.surfaceTempK + heatBoost).coerceAtMost(12000.0)
+                        val blastDv = (85_000.0 * (PhysicsUnits.AU_METERS / dist)).coerceIn(500.0, 95_000.0)
+                        other.vx += (dx / dist) * blastDv
+                        other.vy += (dy / dist) * blastDv
+                        if (dist < PhysicsUnits.AU_METERS * 2.5) {
+                            other.atmosphereFraction *= 0.45
+                        }
+                    }
+
+                    val energyMt = 1.5e29 // Условная энергия вспышки сверхновой
+                    if (isCompact) {
+                        heavyBodies.removeAt(idx)
+                        if (selectedBodyId == bodyId) selectedBodyId = null
+                    } else {
+                        target.name = "${target.name} (Пульсар)"
+                        target.textureStyle = TextureStyle.NEUTRON_STAR
+                        target.massKg = (m * 0.55).coerceAtLeast(PhysicsUnits.SUN_MASS_KG * 0.45)
+                        target.radiusM = 2.4e7
+                        target.luminosityW = PhysicsUnits.SUN_LUMINOSITY_W * 0.15
+                        target.surfaceTempK = 28_000.0
+                        target.primaryColorArgb = 0xFF6EE7B7.toInt()
+                        target.secondaryColorArgb = 0xFF2DD4BF.toInt()
+                        target.densityKgM3 = PhysicsUnits.computeDensityKgM3(target.massKg, target.radiusM)
+                    }
+
+                    _lastCollision.value = CollisionEvent(
+                        title = "Сверхновая: ${target.name}",
+                        isMerge = false,
+                        energyMt = energyMt,
+                        massLossPercent = if (isCompact) 100.0 else 45.0,
+                        newMassKg = if (isCompact) 0.0 else target.massKg,
+                        newDensityKgM3 = if (isCompact) 0.0 else target.densityKgM3,
+                        newTempK = 28_000.0,
+                        tempDeltaK = 22_000.0,
+                        atmosphereLossPercent = 55.0,
+                        timestampMs = System.currentTimeMillis()
+                    )
+                }
+
+                BodyType.BLACK_HOLE -> {
+                    spawnDebrisLocked(cx, cy, cvx, cvy, r * 2.0, 320_000.0, count = 20, hotColor = 0xFF2DD4BF.toInt())
+                    spawnFlashLocked(cx, cy, r * 14.0, 0xFF10B981.toInt(), true)
+                    spawnFlashLocked(cx, cy, r * 8.0, 0xFFE0F2FE.toInt(), false)
+                    _lastCollision.value = CollisionEvent(
+                        title = "Релятивистский выброс: ${target.name}",
+                        isMerge = false,
+                        energyMt = 5.0e26,
+                        massLossPercent = 0.0,
+                        newMassKg = m,
+                        newDensityKgM3 = target.densityKgM3,
+                        newTempK = 0.0,
+                        tempDeltaK = 0.0,
+                        atmosphereLossPercent = 0.0,
+                        timestampMs = System.currentTimeMillis()
+                    )
+                }
+
+                else -> {
+                    val esc = PhysicsUnits.computeEscapeVelocity(m, r)
+                    val ejectSpeed = max(esc * 1.45, 18_000.0)
+                    spawnDebrisLocked(
+                        x = cx,
+                        y = cy,
+                        baseVx = cvx,
+                        baseVy = cvy,
+                        parentRadiusM = max(r, 2.0e6),
+                        ejectSpeed = ejectSpeed,
+                        count = 22,
+                        hotColor = 0xFFFF7043.toInt()
+                    )
+                    spawnFlashLocked(cx, cy, max(r * 9.0, 4.5e7), 0xFFFF6D00.toInt(), true)
+                    spawnFlashLocked(cx, cy, max(r * 5.0, 2.5e7), 0xFFFFF59D.toInt(), false)
+
+                    heavyBodies.removeAt(idx)
+                    if (selectedBodyId == bodyId) selectedBodyId = null
+                    _lastCollision.value = CollisionEvent(
+                        title = "Детонация: ${target.name}",
+                        isMerge = false,
+                        energyMt = (0.6 * PhysicsUnits.G_SI * m * m / max(1.0, r)) / PhysicsUnits.MEGATON_JOULES,
+                        massLossPercent = 100.0,
+                        newMassKg = 0.0,
+                        newDensityKgM3 = 0.0,
+                        newTempK = 3600.0,
+                        tempDeltaK = 3200.0,
+                        atmosphereLossPercent = if (target.atmosphereFraction > 0.0) 100.0 else 0.0,
+                        timestampMs = System.currentTimeMillis()
+                    )
+                }
+            }
+            computeAccelerationsLocked()
+            _snapshot.value = buildSnapshotLocked()
+        }
+    }
+
     // Прогноз орбиты для запуска нового тела
     fun predictTrajectory(
         startX: Double,
@@ -524,6 +656,24 @@ class PhysicsEngine {
                         mergedOrRemovedI = true
                         break
                     }
+                } else {
+                    // Проверка предела Роша (приливное разрушение в гравитационном поле гиганта/звезды/ЧД)
+                    val primaryWins = b1.massKg >= b2.massKg
+                    val primary = if (primaryWins) b1 else b2
+                    val victim = if (primaryWins) b2 else b1
+                    if (shouldTidallyDisruptLocked(primary, victim, distSq)) {
+                        handleTidalDisruptionLocked(primary, victim)
+                        if (primaryWins) {
+                            heavyBodies.removeAt(j)
+                            if (selectedBodyId == victim.id) selectedBodyId = primary.id
+                            continue
+                        } else {
+                            heavyBodies.removeAt(i)
+                            if (selectedBodyId == victim.id) selectedBodyId = primary.id
+                            mergedOrRemovedI = true
+                            break
+                        }
+                    }
                 }
                 j++
             }
@@ -732,6 +882,51 @@ class PhysicsEngine {
                 timestampMs = System.currentTimeMillis()
             )
         }
+    }
+
+    // Проверка предела Роша: приливное разрывание планет и спутников при опасном сближении
+    private fun shouldTidallyDisruptLocked(
+        primary: CelestialBody,
+        victim: CelestialBody,
+        distSq: Double
+    ): Boolean {
+        if (victim.type == BodyType.STAR || victim.type == BodyType.BLACK_HOLE) return false
+        if (victim.massKg < 1e20 || primary.massKg < victim.massKg * 50.0) return false
+        val rocheM = 1.45 * victim.radiusM * (2.0 * primary.massKg / victim.massKg).pow(1.0 / 3.0)
+        return distSq < rocheM * rocheM
+    }
+
+    private fun handleTidalDisruptionLocked(primary: CelestialBody, victim: CelestialBody) {
+        val rvx = victim.vx - primary.vx
+        val rvy = victim.vy - primary.vy
+        val relSpeed = sqrt(rvx * rvx + rvy * rvy)
+        val esc = PhysicsUnits.computeEscapeVelocity(victim.massKg, victim.radiusM)
+
+        spawnDebrisLocked(
+            x = victim.x,
+            y = victim.y,
+            baseVx = victim.vx,
+            baseVy = victim.vy,
+            parentRadiusM = max(victim.radiusM * 1.4, 3.0e6),
+            ejectSpeed = max(esc * 1.2, relSpeed * 0.25),
+            count = 20,
+            hotColor = 0xFFFF8A3D.toInt()
+        )
+        spawnFlashLocked(victim.x, victim.y, max(victim.radiusM * 6.5, primary.radiusM * 0.9), 0xFF34D399.toInt(), true)
+
+        val energyMt = (0.5 * victim.massKg * relSpeed * relSpeed) / PhysicsUnits.MEGATON_JOULES
+        _lastCollision.value = CollisionEvent(
+            title = "Предел Роша: ${primary.name} разорвала ${victim.name}",
+            isMerge = false,
+            energyMt = energyMt,
+            massLossPercent = 100.0,
+            newMassKg = primary.massKg,
+            newDensityKgM3 = primary.densityKgM3,
+            newTempK = 2400.0,
+            tempDeltaK = 2000.0,
+            atmosphereLossPercent = if (victim.atmosphereFraction > 0.0) 100.0 else 0.0,
+            timestampMs = System.currentTimeMillis()
+        )
     }
 
     private fun spawnFlashLocked(x: Double, y: Double, radiusM: Double, colorArgb: Int, shockwave: Boolean) {

@@ -47,6 +47,7 @@ data class LaunchDragState(
 
 data class VisualSettings(
     val showGrid: Boolean = true,
+    val showGravityGrid: Boolean = true,
     val showTrails: Boolean = true,
     val showLabels: Boolean = true,
     val showHabitableZone: Boolean = true,
@@ -318,6 +319,16 @@ class SimulationViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
+    fun detonateBody(bodyId: Long) {
+        engine.detonateBody(bodyId)
+        _uiState.update { state ->
+            val stillExists = engine.snapshot.value.bodies.any { !it.isLightweight && it.id == bodyId }
+            if (!stillExists && state.camera.followBodyId == bodyId) {
+                state.copy(camera = state.camera.copy(followBodyId = null))
+            } else state
+        }
+    }
+
     fun deselectBody() {
         engine.selectBody(null)
         _uiState.update { it.copy(camera = it.camera.copy(followBodyId = null)) }
@@ -433,6 +444,10 @@ class SimulationViewModel(application: Application) : AndroidViewModel(applicati
 
     fun toggleGrid() = _uiState.update {
         it.copy(visualSettings = it.visualSettings.copy(showGrid = !it.visualSettings.showGrid))
+    }
+
+    fun toggleGravityGrid() = _uiState.update {
+        it.copy(visualSettings = it.visualSettings.copy(showGravityGrid = !it.visualSettings.showGravityGrid))
     }
 
     fun toggleTrails() = _uiState.update {

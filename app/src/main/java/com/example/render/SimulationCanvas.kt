@@ -11,6 +11,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
@@ -18,51 +19,66 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.res.imageResource
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
+import com.example.R
 import com.example.physics.BodyType
 import com.example.physics.PhysicsUnits
 import com.example.physics.RenderBody
 import com.example.physics.SimulationSnapshot
+import com.example.physics.TextureStyle
 import kotlin.math.ceil
 import kotlin.math.floor
 import kotlin.math.log10
 import kotlin.math.max
 import kotlin.math.pow
 import kotlin.math.roundToInt
+import kotlin.math.sin
 import kotlin.math.sqrt
 import kotlin.random.Random
 
-// Класс отрисовки космоса через Jetpack Compose Canvas с процедурными градиентами атмосферы и освещённости
+// Класс отрисовки космоса через Jetpack Compose Canvas с тёмно-зелёной цветокоррекцией,
+// искривлением гравитационной сетки, туманностью и многослойными процедурными эффектами
 class SimulationCanvas {
 
-    private val trailPath = Path()
+    private val trailTailPath = Path()
+    private val trailMidPath = Path()
+    private val trailHeadPath = Path()
+    private val gridPath = Path()
     private val predictPath = Path()
     private val dashEffect = PathEffect.dashPathEffect(floatArrayOf(14f, 10f), 0f)
 
+    // Преаллоцированные массивы тяжёлых тел для расчёта гравитационного искривления сетки
+    private val maxWellBodies = 12
+    private val wellScreenX = FloatArray(maxWellBodies)
+    private val wellScreenY = FloatArray(maxWellBodies)
+    private val wellStrength = FloatArray(maxWellBodies)
+
     private val gridTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = android.graphics.Color.argb(145, 148, 163, 184)
+        color = android.graphics.Color.argb(170, 143, 184, 168)
         textSize = 24f
         typeface = Typeface.MONOSPACE
     }
     private val labelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = android.graphics.Color.argb(230, 248, 250, 252)
+        color = android.graphics.Color.argb(235, 240, 253, 248)
         textSize = 28f
         typeface = Typeface.create(Typeface.SANS_SERIF, Typeface.BOLD)
         setShadowLayer(4f, 0f, 1f, android.graphics.Color.BLACK)
     }
     private val arrowTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = android.graphics.Color.rgb(191, 219, 254)
+        color = android.graphics.Color.rgb(167, 243, 208)
         textSize = 30f
         typeface = Typeface.MONOSPACE
         setShadowLayer(5f, 0f, 1f, android.graphics.Color.BLACK)
     }
 
-    // Преаллоцированные звёзды фона для стабильных 60 FPS
-    private val starCount = 160
+    // Преаллоцированные звёзды фона (изумрудная, тёплая золотая и холодная белая палитра)
+    private val starCount = 210
     private val starX = FloatArray(starCount)
     private val starY = FloatArray(starCount)
     private val starSize = FloatArray(starCount)
+    private val starParallax = FloatArray(starCount)
     private val starColor = Array(starCount) { Color.White }
 
     init {
@@ -70,12 +86,14 @@ class SimulationCanvas {
         for (i in 0 until starCount) {
             starX[i] = rng.nextFloat()
             starY[i] = rng.nextFloat()
-            starSize[i] = 0.8f + rng.nextFloat() * 1.9f
-            val alpha = 75 + rng.nextInt(155)
-            starColor[i] = when (rng.nextInt(5)) {
-                0 -> Color(191, 219, 254, alpha)
-                1 -> Color(254, 240, 138, alpha)
-                else -> Color(226, 232, 240, alpha)
+            starSize[i] = 0.7f + rng.nextFloat() * 2.0f
+            starParallax[i] = 1.2f + rng.nextFloat() * 3.0f
+            val alpha = 75 + rng.nextInt(165)
+            starColor[i] = when (rng.nextInt(6)) {
+                0 -> Color(110, 231, 183, alpha) // Нежная изумрудная
+                1 -> Color(167, 243, 208, alpha)
+                2 -> Color(254, 240, 138, alpha)
+                else -> Color(236, 253, 245, alpha)
             }
         }
     }
@@ -85,6 +103,7 @@ class SimulationCanvas {
         camera: CameraState,
         selectedBodyId: Long?,
         showGrid: Boolean,
+        showGravityGrid: Boolean,
         showTrails: Boolean,
         showLabels: Boolean,
         showHabitableZone: Boolean,
@@ -94,20 +113,34 @@ class SimulationCanvas {
         launchEndScreenX: Float?,
         launchEndScreenY: Float?,
         launchSpeedLabel: String?,
-        predictedPointsWorld: FloatArray?
+        predictedPointsWorld: FloatArray?,
+        backdropBitmap: ImageBitmap?
     ) {
         val widthPx = size.width
         val heightPx = size.height
 
-        // 1. Чистый чёрный фон глубокого космоса
-        drawRect(color = Color.Black)
+        // 1. Тёмно-изумрудный фон глубокого космоса + сгенерированная туманность
+        drawRect(color = Color(0xFF010806))
+        if (backdropBitmap != null) {
+            drawNebulaBackdrop(backdropBitmap, widthPx, heightPx, camera)
+        }
+        // Тёмно-зелёная цветокоррекционная виньетка по краям
+        drawRect(
+            brush = Brush.radialGradient(
+                0.0f to Color(0x10064E3B),
+                0.65f to Color(0x28021A12),
+                1.0f to Color(0xAA010705),
+                center = Offset(widthPx * 0.5f, heightPx * 0.5f),
+                radius = max(widthPx, heightPx) * 0.78f
+            )
+        )
 
-        // 2. Звёздное небо с мягким параллаксом
+        // 2. Звёздное небо с многослойным параллаксом
         drawBackgroundStars(widthPx, heightPx, camera)
 
-        // 3. Сетка расстояний
+        // 3. Сетка расстояний (опционально искривляется гравитационными колодцами)
         if (showGrid) {
-            drawDistanceGrid(widthPx, heightPx, camera)
+            drawDistanceGrid(widthPx, heightPx, camera, snapshot, showGravityGrid)
         }
 
         // 4. Обитаемая зона (Зона Златовласки) вокруг звёзд
@@ -115,7 +148,7 @@ class SimulationCanvas {
             drawHabitableZones(widthPx, heightPx, snapshot, camera)
         }
 
-        // 5. Следы орбит
+        // 5. Плавные затухающие следы орбит
         if (showTrails) {
             drawOrbitTrails(widthPx, heightPx, snapshot, camera)
         }
@@ -125,13 +158,14 @@ class SimulationCanvas {
             drawPredictedOrbit(widthPx, heightPx, camera, predictedPointsWorld)
         }
 
-        // 7. Хвосты комет
+        // 7. Хвосты комет (изумрудно-бирюзовый ионный + пылевой)
         if (snapshot.hasStar) {
             drawCometTails(widthPx, heightPx, snapshot, camera)
         }
 
-        // 8. Небесные тела (окружности с процедурными текстурами и градиентами атмосферы/освещённости)
+        // 8. Небесные тела
         val bodies = snapshot.bodies
+        val animPhase = (snapshot.simTimeSeconds * 0.0002).toFloat()
         for (i in 0 until bodies.size) {
             val body = bodies[i]
             val sx = camera.worldToScreenX(body.x, widthPx)
@@ -139,7 +173,7 @@ class SimulationCanvas {
             val physPx = camera.metersToPx(body.radiusM, widthPx)
             val drawR = computeVisualRadius(body, physPx)
 
-            val margin = drawR * 4.5f + 60f
+            val margin = drawR * 4.8f + 70f
             if (sx < -margin || sx > widthPx + margin || sy < -margin || sy > heightPx + margin) {
                 continue
             }
@@ -157,12 +191,13 @@ class SimulationCanvas {
                     widthPx = widthPx,
                     heightPx = heightPx,
                     camera = camera,
-                    showVelocityVector = showVelocityVectors
+                    showVelocityVector = showVelocityVectors,
+                    animPhase = animPhase
                 )
             }
         }
 
-        // 9. Ударные вспышки и волны
+        // 9. Ударные вспышки, волны и сверхновые
         drawImpactFlashes(widthPx, heightPx, snapshot, camera)
 
         // 10. Подписи тел
@@ -184,10 +219,33 @@ class SimulationCanvas {
         }
     }
 
+    private fun DrawScope.drawNebulaBackdrop(
+        bmp: ImageBitmap,
+        widthPx: Float,
+        heightPx: Float,
+        camera: CameraState
+    ) {
+        val scale = max(widthPx / bmp.width.toFloat(), heightPx / bmp.height.toFloat()) * 1.12f
+        val dstW = (bmp.width * scale).roundToInt()
+        val dstH = (bmp.height * scale).roundToInt()
+        val shiftX = ((-camera.centerX / PhysicsUnits.AU_METERS) * 0.6).toFloat().coerceIn(-45f, 45f)
+        val shiftY = ((-camera.centerY / PhysicsUnits.AU_METERS) * 0.6).toFloat().coerceIn(-45f, 45f)
+        val ox = ((widthPx - dstW) * 0.5f + shiftX).roundToInt()
+        val oy = ((heightPx - dstH) * 0.5f + shiftY).roundToInt()
+        drawImage(
+            image = bmp,
+            dstOffset = IntOffset(ox, oy),
+            dstSize = IntSize(dstW, dstH),
+            alpha = 0.36f
+        )
+    }
+
     private fun DrawScope.drawBackgroundStars(widthPx: Float, heightPx: Float, camera: CameraState) {
-        val pxShift = ((camera.centerX / PhysicsUnits.AU_METERS) * 2.5).toFloat()
-        val pyShift = ((camera.centerY / PhysicsUnits.AU_METERS) * 2.5).toFloat()
+        val camAuX = camera.centerX / PhysicsUnits.AU_METERS
+        val camAuY = camera.centerY / PhysicsUnits.AU_METERS
         for (i in 0 until starCount) {
+            val pxShift = (camAuX * starParallax[i]).toFloat()
+            val pyShift = (camAuY * starParallax[i]).toFloat()
             val x = ((starX[i] * widthPx - pxShift) % widthPx + widthPx) % widthPx
             val y = ((starY[i] * heightPx - pyShift) % heightPx + heightPx) % heightPx
             drawCircle(
@@ -198,7 +256,13 @@ class SimulationCanvas {
         }
     }
 
-    private fun DrawScope.drawDistanceGrid(widthPx: Float, heightPx: Float, camera: CameraState) {
+    private fun DrawScope.drawDistanceGrid(
+        widthPx: Float,
+        heightPx: Float,
+        camera: CameraState,
+        snapshot: SimulationSnapshot,
+        showGravityGrid: Boolean
+    ) {
         val visibleSpanM = camera.halfWidthMeters * 2.0
         val rawStep = visibleSpanM / 4.2
         val exp = floor(log10(rawStep))
@@ -216,8 +280,47 @@ class SimulationCanvas {
         val topM = camera.screenToWorldY(0f, widthPx, heightPx)
         val bottomM = camera.screenToWorldY(heightPx, widthPx, heightPx)
 
-        val lineColor = Color(0x2E3B82F6)
-        val axisColor = Color(0x4A60A5FA)
+        // Собираем гравитационные колодцы для искривления сетки
+        var wellCount = 0
+        if (showGravityGrid) {
+            val bodies = snapshot.bodies
+            val minMass = PhysicsUnits.EARTH_MASS_KG * 15.0
+            for (i in 0 until bodies.size) {
+                val b = bodies[i]
+                if (b.isLightweight || b.massKg < minMass) continue
+                if (wellCount >= maxWellBodies) break
+                val sx = camera.worldToScreenX(b.x, widthPx)
+                val sy = camera.worldToScreenY(b.y, widthPx, heightPx)
+                if (sx < -widthPx || sx > widthPx * 2f || sy < -heightPx || sy > heightPx * 2f) continue
+                wellScreenX[wellCount] = sx
+                wellScreenY[wellCount] = sy
+                // Логарифмически-пропорциональная сила искривления
+                val massFactor = (log10(b.massKg / minMass).toFloat() * 14f).coerceIn(8f, 68f)
+                wellStrength[wellCount] = massFactor
+                wellCount++
+            }
+        }
+
+        val lineColor = Color(0x2E10B981)
+        val axisColor = Color(0x5234D399)
+
+        fun warpPoint(px: Float, py: Float): Offset {
+            if (wellCount == 0) return Offset(px, py)
+            var outX = px
+            var outY = py
+            for (w in 0 until wellCount) {
+                val dx = wellScreenX[w] - px
+                val dy = wellScreenY[w] - py
+                val dSq = dx * dx + dy * dy + 2400f
+                val d = sqrt(dSq)
+                val pull = (wellStrength[w] * 950f / dSq).coerceAtMost(0.42f * d)
+                outX += (dx / d) * pull
+                outY += (dy / d) * pull
+            }
+            return Offset(outX, outY)
+        }
+
+        val segments = if (wellCount > 0) 22 else 1
 
         var wx = floor(leftM / stepM) * stepM
         val endX = ceil(rightM / stepM) * stepM
@@ -225,12 +328,26 @@ class SimulationCanvas {
         while (wx <= endX && guard < 24) {
             val sx = camera.worldToScreenX(wx, widthPx)
             val isAxis = kotlin.math.abs(wx) < stepM * 0.05
-            drawLine(
-                color = if (isAxis) axisColor else lineColor,
-                start = Offset(sx, 0f),
-                end = Offset(sx, heightPx),
-                strokeWidth = if (isAxis) 1.6f else 1.1f
-            )
+            if (segments == 1) {
+                drawLine(
+                    color = if (isAxis) axisColor else lineColor,
+                    start = Offset(sx, 0f),
+                    end = Offset(sx, heightPx),
+                    strokeWidth = if (isAxis) 1.6f else 1.1f
+                )
+            } else {
+                gridPath.reset()
+                for (s in 0..segments) {
+                    val sy = (s.toFloat() / segments) * heightPx
+                    val pt = warpPoint(sx, sy)
+                    if (s == 0) gridPath.moveTo(pt.x, pt.y) else gridPath.lineTo(pt.x, pt.y)
+                }
+                drawPath(
+                    path = gridPath,
+                    color = if (isAxis) axisColor else lineColor,
+                    style = Stroke(width = if (isAxis) 1.6f else 1.1f)
+                )
+            }
             wx += stepM
             guard++
         }
@@ -241,12 +358,26 @@ class SimulationCanvas {
         while (wy <= endY && guard < 24) {
             val sy = camera.worldToScreenY(wy, widthPx, heightPx)
             val isAxis = kotlin.math.abs(wy) < stepM * 0.05
-            drawLine(
-                color = if (isAxis) axisColor else lineColor,
-                start = Offset(0f, sy),
-                end = Offset(widthPx, sy),
-                strokeWidth = if (isAxis) 1.6f else 1.1f
-            )
+            if (segments == 1) {
+                drawLine(
+                    color = if (isAxis) axisColor else lineColor,
+                    start = Offset(0f, sy),
+                    end = Offset(widthPx, sy),
+                    strokeWidth = if (isAxis) 1.6f else 1.1f
+                )
+            } else {
+                gridPath.reset()
+                for (s in 0..segments) {
+                    val sx = (s.toFloat() / segments) * widthPx
+                    val pt = warpPoint(sx, sy)
+                    if (s == 0) gridPath.moveTo(pt.x, pt.y) else gridPath.lineTo(pt.x, pt.y)
+                }
+                drawPath(
+                    path = gridPath,
+                    color = if (isAxis) axisColor else lineColor,
+                    style = Stroke(width = if (isAxis) 1.6f else 1.1f)
+                )
+            }
             wy += stepM
             guard++
         }
@@ -279,26 +410,27 @@ class SimulationCanvas {
             val bandWidth = max(2f, rOut - rIn)
             val midR = (rIn + rOut) * 0.5f
             drawCircle(
-                color = Color(0x1C10B981),
+                color = Color(0x2210B981),
                 radius = midR,
                 center = Offset(sx, sy),
                 style = Stroke(width = bandWidth)
             )
             drawCircle(
-                color = Color(0x5534D399),
+                color = Color(0x6634D399),
                 radius = rIn,
                 center = Offset(sx, sy),
-                style = Stroke(width = 1.2f, pathEffect = dashEffect)
+                style = Stroke(width = 1.3f, pathEffect = dashEffect)
             )
             drawCircle(
-                color = Color(0x5534D399),
+                color = Color(0x6634D399),
                 radius = rOut,
                 center = Offset(sx, sy),
-                style = Stroke(width = 1.2f, pathEffect = dashEffect)
+                style = Stroke(width = 1.3f, pathEffect = dashEffect)
             )
         }
     }
 
+    // Трёхступенчатый затухающий след орбиты без лишних аллокаций
     private fun DrawScope.drawOrbitTrails(
         widthPx: Float,
         heightPx: Float,
@@ -316,24 +448,50 @@ class SimulationCanvas {
             val head = b.trailHead
             val startIdx = (head - count + cap) % cap
 
-            trailPath.reset()
+            val split1 = count / 3
+            val split2 = (count * 2) / 3
+
+            trailTailPath.reset()
+            trailMidPath.reset()
+            trailHeadPath.reset()
+
+            var prevSx = 0f
+            var prevSy = 0f
             for (k in 0 until count) {
                 val idx = (startIdx + k) % cap
                 val sx = camera.worldToScreenX(xs[idx], widthPx)
                 val sy = camera.worldToScreenY(ys[idx], widthPx, heightPx)
-                if (k == 0) trailPath.moveTo(sx, sy) else trailPath.lineTo(sx, sy)
+                when {
+                    k <= split1 -> {
+                        if (k == 0) trailTailPath.moveTo(sx, sy) else trailTailPath.lineTo(sx, sy)
+                        if (k == split1) trailMidPath.moveTo(sx, sy)
+                    }
+                    k <= split2 -> {
+                        trailMidPath.lineTo(sx, sy)
+                        if (k == split2) trailHeadPath.moveTo(sx, sy)
+                    }
+                    else -> {
+                        trailHeadPath.lineTo(sx, sy)
+                    }
+                }
+                prevSx = sx
+                prevSy = sy
             }
-            trailPath.lineTo(
-                camera.worldToScreenX(b.x, widthPx),
-                camera.worldToScreenY(b.y, widthPx, heightPx)
-            )
+            val curSx = camera.worldToScreenX(b.x, widthPx)
+            val curSy = camera.worldToScreenY(b.y, widthPx, heightPx)
+            if (split2 >= count - 1) {
+                trailHeadPath.moveTo(prevSx, prevSy)
+            }
+            trailHeadPath.lineTo(curSx, curSy)
 
-            val tint = Color(b.primaryColorArgb).copy(alpha = 0.42f)
-            drawPath(
-                path = trailPath,
-                color = tint,
-                style = Stroke(width = 2.1f, cap = StrokeCap.Round)
-            )
+            val tint = Color(b.primaryColorArgb)
+            if (split1 > 0) {
+                drawPath(trailTailPath, tint.copy(alpha = 0.16f), style = Stroke(width = 1.5f, cap = StrokeCap.Round))
+            }
+            if (split2 > split1) {
+                drawPath(trailMidPath, tint.copy(alpha = 0.36f), style = Stroke(width = 2.0f, cap = StrokeCap.Round))
+            }
+            drawPath(trailHeadPath, tint.copy(alpha = 0.65f), style = Stroke(width = 2.5f, cap = StrokeCap.Round))
         }
     }
 
@@ -352,36 +510,36 @@ class SimulationCanvas {
             val dx = b.x - starX
             val dy = b.y - starY
             val dist = sqrt(dx * dx + dy * dy)
-            if (dist < 1e6 || dist > PhysicsUnits.AU_METERS * 8.0) continue
+            if (dist < 1e6 || dist > PhysicsUnits.AU_METERS * 8.5) continue
 
             val sx = camera.worldToScreenX(b.x, widthPx)
             val sy = camera.worldToScreenY(b.y, widthPx, heightPx)
             val ux = (dx / dist).toFloat()
             val uy = (dy / dist).toFloat()
-            val intensity = (1.0 - dist / (PhysicsUnits.AU_METERS * 8.0)).toFloat().coerceIn(0.15f, 1f)
-            val tailLenPx = (52f + 95f * intensity).coerceAtMost(155f)
+            val intensity = (1.0 - dist / (PhysicsUnits.AU_METERS * 8.5)).toFloat().coerceIn(0.18f, 1f)
+            val tailLenPx = (58f + 105f * intensity).coerceAtMost(170f)
             val end = Offset(sx + ux * tailLenPx, sy + uy * tailLenPx)
 
             drawLine(
                 brush = Brush.linearGradient(
-                    colors = listOf(Color(0x997DD3FC), Color.Transparent),
+                    colors = listOf(Color(0xAA2DD4BF), Color.Transparent),
                     start = Offset(sx, sy),
                     end = end
                 ),
                 start = Offset(sx, sy),
                 end = end,
-                strokeWidth = 7.5f,
+                strokeWidth = 8.5f,
                 cap = StrokeCap.Round
             )
             drawLine(
                 brush = Brush.linearGradient(
-                    colors = listOf(Color(0xDDE0F2FE), Color.Transparent),
+                    colors = listOf(Color(0xEEA7F3D0), Color.Transparent),
                     start = Offset(sx, sy),
-                    end = end
+                    end = Offset(sx + ux * tailLenPx * 0.78f, sy + uy * tailLenPx * 0.78f)
                 ),
                 start = Offset(sx, sy),
-                end = Offset(sx + ux * tailLenPx * 0.75f, sy + uy * tailLenPx * 0.75f),
-                strokeWidth = 2.8f,
+                end = Offset(sx + ux * tailLenPx * 0.78f, sy + uy * tailLenPx * 0.78f),
+                strokeWidth = 3.0f,
                 cap = StrokeCap.Round
             )
         }
@@ -394,6 +552,9 @@ class SimulationCanvas {
         drawR: Float
     ) {
         val c = if (b.surfaceTempK > 950.0) Color(0xFFFF8A3D) else Color(b.primaryColorArgb)
+        if (b.surfaceTempK > 950.0 || b.type == BodyType.STAR) {
+            drawCircle(color = c.copy(alpha = 0.28f), radius = drawR * 2.1f, center = Offset(sx, sy))
+        }
         drawCircle(color = c, radius = drawR, center = Offset(sx, sy))
     }
 
@@ -407,20 +568,22 @@ class SimulationCanvas {
         widthPx: Float,
         heightPx: Float,
         camera: CameraState,
-        showVelocityVector: Boolean
+        showVelocityVector: Boolean,
+        animPhase: Float
     ) {
         val center = Offset(sx, sy)
         val primary = Color(body.primaryColorArgb)
         val secondary = Color(body.secondaryColorArgb)
 
-        // 1. Звёзды: многослойный процедурный градиент короны + лучи + фотосфера
         if (body.type == BodyType.STAR) {
-            val coronaR = drawR * 3.4f
+            val pulse = 1.0f + 0.06f * sin(animPhase + body.id)
+            val coronaR = drawR * 3.8f * pulse
             drawCircle(
                 brush = Brush.radialGradient(
                     colors = listOf(
-                        primary.copy(alpha = 0.65f),
-                        secondary.copy(alpha = 0.25f),
+                        primary.copy(alpha = 0.72f),
+                        secondary.copy(alpha = 0.28f),
+                        Color(0x1610B981),
                         Color.Transparent
                     ),
                     center = center,
@@ -430,11 +593,29 @@ class SimulationCanvas {
                 center = center
             )
 
-            // Лучи дифракционной короны для звёзд
-            val rayLen = drawR * 2.5f
+            // Если это нейтронная звезда / пульсар — вращающиеся релятивистские лучи
+            if (body.textureStyle == TextureStyle.NEUTRON_STAR) {
+                rotate(degrees = (animPhase * 42f) % 360f, pivot = center) {
+                    val beamLen = drawR * 5.2f
+                    drawLine(
+                        brush = Brush.linearGradient(
+                            colors = listOf(Color.Transparent, Color(0xDD6EE7B7), Color.Transparent),
+                            start = Offset(sx - beamLen, sy),
+                            end = Offset(sx + beamLen, sy)
+                        ),
+                        start = Offset(sx - beamLen, sy),
+                        end = Offset(sx + beamLen, sy),
+                        strokeWidth = max(2.2f, drawR * 0.28f),
+                        cap = StrokeCap.Round
+                    )
+                }
+            }
+
+            // Основные и диагональные дифракционные лучи
+            val rayLen = drawR * 2.75f * pulse
             drawLine(
                 brush = Brush.linearGradient(
-                    colors = listOf(Color.Transparent, primary.copy(alpha = 0.55f), Color.Transparent),
+                    colors = listOf(Color.Transparent, primary.copy(alpha = 0.58f), Color.Transparent),
                     start = Offset(sx - rayLen, sy),
                     end = Offset(sx + rayLen, sy)
                 ),
@@ -444,7 +625,7 @@ class SimulationCanvas {
             )
             drawLine(
                 brush = Brush.linearGradient(
-                    colors = listOf(Color.Transparent, primary.copy(alpha = 0.55f), Color.Transparent),
+                    colors = listOf(Color.Transparent, primary.copy(alpha = 0.58f), Color.Transparent),
                     start = Offset(sx, sy - rayLen),
                     end = Offset(sx, sy + rayLen)
                 ),
@@ -452,8 +633,29 @@ class SimulationCanvas {
                 end = Offset(sx, sy + rayLen),
                 strokeWidth = max(1.6f, drawR * 0.14f)
             )
+            val diag = rayLen * 0.58f
+            drawLine(
+                brush = Brush.linearGradient(
+                    colors = listOf(Color.Transparent, secondary.copy(alpha = 0.30f), Color.Transparent),
+                    start = Offset(sx - diag, sy - diag),
+                    end = Offset(sx + diag, sy + diag)
+                ),
+                start = Offset(sx - diag, sy - diag),
+                end = Offset(sx + diag, sy + diag),
+                strokeWidth = max(1.2f, drawR * 0.08f)
+            )
+            drawLine(
+                brush = Brush.linearGradient(
+                    colors = listOf(Color.Transparent, secondary.copy(alpha = 0.30f), Color.Transparent),
+                    start = Offset(sx - diag, sy + diag),
+                    end = Offset(sx + diag, sy - diag)
+                ),
+                start = Offset(sx - diag, sy + diag),
+                end = Offset(sx + diag, sy - diag),
+                strokeWidth = max(1.2f, drawR * 0.08f)
+            )
 
-            // Текстура фотосферы + яркое ядро градиентом
+            // Текстура фотосферы + яркое ядро
             val img = ProceduralTextureCache.getImageBitmap(body.textureStyle)
             val dInt = (drawR * 2f).roundToInt().coerceAtLeast(2)
             drawImage(
@@ -464,9 +666,9 @@ class SimulationCanvas {
             drawCircle(
                 brush = Brush.radialGradient(
                     colors = listOf(
-                        Color.White.copy(alpha = 0.55f),
+                        Color.White.copy(alpha = 0.52f),
                         primary.copy(alpha = 0.18f),
-                        secondary.copy(alpha = 0.35f)
+                        secondary.copy(alpha = 0.34f)
                     ),
                     center = center,
                     radius = drawR
@@ -475,66 +677,84 @@ class SimulationCanvas {
                 center = center
             )
         } else if (body.type == BodyType.BLACK_HOLE) {
-            // Чёрная дыра: гравитационное линзирование + аккреционный диск + горизонт событий
+            // Гравитационное линзирование в тёмно-изумрудной и янтарной гамме
             drawCircle(
                 brush = Brush.radialGradient(
                     colors = listOf(
-                        Color(0x883B82F6),
-                        Color(0x3360A5FA),
+                        Color(0x9910B981),
+                        Color(0x442DD4BF),
+                        Color(0x18064E3B),
                         Color.Transparent
                     ),
                     center = center,
-                    radius = drawR * 3.2f
+                    radius = drawR * 3.8f
                 ),
-                radius = drawR * 3.2f,
+                radius = drawR * 3.8f,
                 center = center
             )
 
             rotate(degrees = -22f, pivot = center) {
-                val diskW = drawR * 4.4f
-                val diskH = drawR * 1.15f
+                val outerW = drawR * 5.0f
+                val outerH = drawR * 1.32f
                 drawOval(
                     brush = Brush.linearGradient(
                         colors = listOf(
-                            Color(0xDD93C5FD),
-                            Color(0xAAF59E0B),
-                            Color(0x553B82F6)
+                            Color(0xAA34D399),
+                            Color(0x882DD4BF),
+                            Color(0x66065F46)
+                        ),
+                        start = Offset(sx - outerW * 0.5f, sy),
+                        end = Offset(sx + outerW * 0.5f, sy)
+                    ),
+                    topLeft = Offset(sx - outerW * 0.5f, sy - outerH * 0.5f),
+                    size = Size(outerW, outerH),
+                    style = Stroke(width = max(2.0f, drawR * 0.25f))
+                )
+
+                val diskW = drawR * 3.9f
+                val diskH = drawR * 1.0f
+                drawOval(
+                    brush = Brush.linearGradient(
+                        colors = listOf(
+                            Color(0xEEA7F3D0),
+                            Color(0xCCF59E0B),
+                            Color(0x7710B981)
                         ),
                         start = Offset(sx - diskW * 0.5f, sy),
                         end = Offset(sx + diskW * 0.5f, sy)
                     ),
                     topLeft = Offset(sx - diskW * 0.5f, sy - diskH * 0.5f),
                     size = Size(diskW, diskH),
-                    style = Stroke(width = max(2.4f, drawR * 0.35f))
+                    style = Stroke(width = max(2.4f, drawR * 0.34f))
                 )
             }
 
-            // Горизонт событий и фотонное кольцо
+            // Горизонт событий и яркое фотонное кольцо
             drawCircle(color = Color.Black, radius = drawR, center = center)
             drawCircle(
-                color = Color(0xFFE0F2FE),
+                color = Color(0xFFA7F3D0),
                 radius = drawR,
                 center = center,
                 style = Stroke(width = max(1.8f, drawR * 0.12f))
             )
         } else {
-            // 2. Планеты, спутники и кометы
+            // Задняя дуга колец
             if (body.hasRings && drawR >= 5f) {
                 drawPlanetRings(body, sx, sy, drawR, frontHalf = false)
             }
 
-            // Атмосферное гало (процедурный радиальный градиент)
+            // Атмосферное гало
             if (body.atmosphereFraction > 0.15 && drawR >= 5f && body.surfaceTempK < 1800.0) {
-                val atmoR = drawR * 1.24f
-                val atmoColor = if (body.name == "Венера" || body.name == "Титан") {
-                    Color(0xFFFBBF24)
-                } else {
-                    Color(0xFF60A5FA)
+                val atmoR = drawR * 1.26f
+                val atmoColor = when {
+                    body.name == "Венера" || body.name == "Титан" -> Color(0xFFFBBF24)
+                    body.name == "Изумрудия" || body.name == "Трисолярис" -> Color(0xFF34D399)
+                    else -> Color(0xFF38BDF8)
                 }
                 drawCircle(
                     brush = Brush.radialGradient(
-                        0.68f to Color.Transparent,
-                        0.84f to atmoColor.copy(alpha = (0.45f * body.atmosphereFraction.toFloat()).coerceIn(0.1f, 0.55f)),
+                        0.66f to Color.Transparent,
+                        0.84f to atmoColor.copy(alpha = (0.48f * body.atmosphereFraction.toFloat()).coerceIn(0.12f, 0.58f)),
                         1.0f to Color.Transparent,
                         center = center,
                         radius = atmoR
@@ -553,7 +773,7 @@ class SimulationCanvas {
                 dstSize = IntSize(dInt, dInt)
             )
 
-            // Процедурная освещённость от ближайшей звезды (светлая сторона + ночной терминатор)
+            // Освещённость от ближайшей звезды (светлая сторона + ночной терминатор)
             if (snapshot.hasStar) {
                 val lx = snapshot.nearestStarX - body.x
                 val ly = snapshot.nearestStarY - body.y
@@ -564,9 +784,9 @@ class SimulationCanvas {
                     val litFocus = Offset(sx + ux * drawR * 0.48f, sy + uy * drawR * 0.48f)
                     drawCircle(
                         brush = Brush.radialGradient(
-                            0.0f to Color.White.copy(alpha = 0.22f),
+                            0.0f to Color.White.copy(alpha = 0.24f),
                             0.55f to Color.Transparent,
-                            1.0f to Color(0xC200030A),
+                            1.0f to Color(0xC6000604),
                             center = litFocus,
                             radius = drawR * 1.38f
                         ),
@@ -576,59 +796,60 @@ class SimulationCanvas {
                 }
             }
 
-            // Нагрев поверхности до раскалённого состояния (после столкновений или у звезды)
+            // Нагрев до раскалённого состояния
             if (body.surfaceTempK > 780.0) {
                 val heatRatio = ((body.surfaceTempK - 780.0) / 3200.0).toFloat().coerceIn(0f, 1f)
                 drawCircle(
                     brush = Brush.radialGradient(
                         colors = listOf(
-                            Color(0xFFFFF59D).copy(alpha = heatRatio * 0.9f),
-                            Color(0xFFFF5722).copy(alpha = heatRatio * 0.72f),
+                            Color(0xFFFFF59D).copy(alpha = heatRatio * 0.92f),
+                            Color(0xFFFF5722).copy(alpha = heatRatio * 0.74f),
                             Color.Transparent
                         ),
                         center = center,
-                        radius = drawR * 1.35f
+                        radius = drawR * 1.38f
                     ),
-                    radius = drawR * 1.35f,
+                    radius = drawR * 1.38f,
                     center = center
                 )
             }
 
+            // Передняя дуга колец
             if (body.hasRings && drawR >= 5f) {
                 drawPlanetRings(body, sx, sy, drawR, frontHalf = true)
             }
         }
 
-        // 3. Вектор скорости тела (опциональный слой)
+        // Вектор скорости
         if (showVelocityVector) {
             val speed = sqrt(body.vx * body.vx + body.vy * body.vy)
             if (speed > 100.0) {
                 val ux = (body.vx / speed).toFloat()
                 val uy = (body.vy / speed).toFloat()
-                val len = (24f + (speed / 2500.0).toFloat()).coerceIn(22f, 88f)
+                val len = (24f + (speed / 2500.0).toFloat()).coerceIn(22f, 92f)
                 val end = Offset(sx + ux * len, sy + uy * len)
                 drawLine(
-                    color = Color(0xAA22D3EE),
+                    color = Color(0xBB34D399),
                     start = center,
                     end = end,
-                    strokeWidth = 2.4f,
+                    strokeWidth = 2.5f,
                     cap = StrokeCap.Round
                 )
-                drawCircle(color = Color(0xFF22D3EE), radius = 3.2f, center = end)
+                drawCircle(color = Color(0xFF34D399), radius = 3.4f, center = end)
             }
         }
 
-        // 4. Прицельная рамка выбранного тела
+        // Прицельная рамка выбранного тела (изумрудная)
         if (isSelected) {
             val selR = drawR + 11f
-            val selColor = Color(0xFF3B82F6)
+            val selColor = Color(0xFF34D399)
             drawCircle(
                 color = selColor,
                 radius = selR,
                 center = center,
                 style = Stroke(width = 3f)
             )
-            val tick = 7f
+            val tick = 8f
             drawLine(selColor, Offset(sx - selR - tick, sy), Offset(sx - selR + 3f, sy), strokeWidth = 3f)
             drawLine(selColor, Offset(sx + selR - 3f, sy), Offset(sx + selR + tick, sy), strokeWidth = 3f)
             drawLine(selColor, Offset(sx, sy - selR - tick), Offset(sx, sy - selR + 3f), strokeWidth = 3f)
@@ -636,6 +857,7 @@ class SimulationCanvas {
         }
     }
 
+    // Многополосные кольца планеты с щелью Кассини
     private fun DrawScope.drawPlanetRings(
         b: RenderBody,
         sx: Float,
@@ -643,20 +865,34 @@ class SimulationCanvas {
         drawR: Float,
         frontHalf: Boolean
     ) {
-        val midRatio = (b.ringInnerRatio + b.ringOuterRatio) * 0.5f
-        val rx = drawR * midRatio
-        val ry = rx * 0.28f
-        val ringThickness = max(2.2f, drawR * (b.ringOuterRatio - b.ringInnerRatio) * 0.55f)
-        val tint = Color(b.primaryColorArgb).copy(alpha = 0.62f)
+        val innerRatio = b.ringInnerRatio
+        val outerRatio = b.ringOuterRatio
+        val span = outerRatio - innerRatio
+        val rInnerBand = drawR * (innerRatio + span * 0.25f)
+        val rOuterBand = drawR * (innerRatio + span * 0.78f)
+        val thickInner = max(1.6f, drawR * span * 0.34f)
+        val thickOuter = max(1.4f, drawR * span * 0.26f)
+        val baseTint = Color(b.primaryColorArgb)
+        val startAngle = if (frontHalf) 0f else 180f
+
         rotate(degrees = -18f, pivot = Offset(sx, sy)) {
             drawArc(
-                color = tint,
-                startAngle = if (frontHalf) 0f else 180f,
+                color = baseTint.copy(alpha = 0.44f),
+                startAngle = startAngle,
                 sweepAngle = 180f,
                 useCenter = false,
-                topLeft = Offset(sx - rx, sy - ry),
-                size = Size(rx * 2f, ry * 2f),
-                style = Stroke(width = ringThickness)
+                topLeft = Offset(sx - rOuterBand, sy - rOuterBand * 0.28f),
+                size = Size(rOuterBand * 2f, rOuterBand * 0.56f),
+                style = Stroke(width = thickOuter)
+            )
+            drawArc(
+                color = baseTint.copy(alpha = 0.72f),
+                startAngle = startAngle,
+                sweepAngle = 180f,
+                useCenter = false,
+                topLeft = Offset(sx - rInnerBand, sy - rInnerBand * 0.28f),
+                size = Size(rInnerBand * 2f, rInnerBand * 0.56f),
+                style = Stroke(width = thickInner)
             )
         }
     }
@@ -673,32 +909,32 @@ class SimulationCanvas {
             val p = (f.ageWallSec / f.durationWallSec).coerceIn(0f, 1f)
             val sx = camera.worldToScreenX(f.x, widthPx)
             val sy = camera.worldToScreenY(f.y, widthPx, heightPx)
-            val maxPx = max(42f, camera.metersToPx(f.maxVisualRadiusM, widthPx)).coerceAtMost(310f)
-            val curR = maxPx * (0.16f + 0.84f * p)
+            val maxPx = max(48f, camera.metersToPx(f.maxVisualRadiusM, widthPx)).coerceAtMost(360f)
+            val curR = maxPx * (0.15f + 0.85f * p)
             val alpha = (1f - p).coerceIn(0f, 1f)
-            val flashColor = Color(f.colorArgb).copy(alpha = alpha * 0.92f)
+            val flashColor = Color(f.colorArgb).copy(alpha = alpha * 0.94f)
 
             if (f.isShockwave) {
                 drawCircle(
                     color = flashColor,
                     radius = curR,
                     center = Offset(sx, sy),
-                    style = Stroke(width = max(2.2f, 12f * (1f - p)))
+                    style = Stroke(width = max(2.4f, 13f * (1f - p)))
                 )
             }
-            if (p < 0.55f) {
-                val coreAlpha = ((1f - p / 0.55f) * 0.88f).coerceIn(0f, 1f)
+            if (p < 0.58f) {
+                val coreAlpha = ((1f - p / 0.58f) * 0.9f).coerceIn(0f, 1f)
                 drawCircle(
                     brush = Brush.radialGradient(
                         colors = listOf(
-                            Color(0xFFFFF9C4).copy(alpha = coreAlpha),
-                            flashColor.copy(alpha = coreAlpha * 0.5f),
+                            Color(0xFFFFFDE7).copy(alpha = coreAlpha),
+                            flashColor.copy(alpha = coreAlpha * 0.55f),
                             Color.Transparent
                         ),
                         center = Offset(sx, sy),
-                        radius = curR * 0.72f
+                        radius = curR * 0.75f
                     ),
-                    radius = curR * 0.72f,
+                    radius = curR * 0.75f,
                     center = Offset(sx, sy)
                 )
             }
@@ -726,9 +962,9 @@ class SimulationCanvas {
 
             val drawR = computeVisualRadius(b, camera.metersToPx(b.radiusM, widthPx))
             labelPaint.color = if (b.id == selectedBodyId) {
-                android.graphics.Color.rgb(96, 165, 250)
+                android.graphics.Color.rgb(52, 211, 153)
             } else {
-                android.graphics.Color.argb(225, 241, 245, 249)
+                android.graphics.Color.argb(228, 240, 253, 248)
             }
             native.drawText(b.name, sx + drawR + 9f, sy + 7f, labelPaint)
         }
@@ -749,7 +985,7 @@ class SimulationCanvas {
         }
         drawPath(
             path = predictPath,
-            color = Color(0xAA3B82F6),
+            color = Color(0xBB34D399),
             style = Stroke(width = 3f, pathEffect = dashEffect)
         )
     }
@@ -763,10 +999,10 @@ class SimulationCanvas {
     ) {
         val start = Offset(x0, y0)
         val end = Offset(x1, y1)
-        drawCircle(color = Color(0x663B82F6), radius = 20f, center = start)
-        drawCircle(color = Color.White, radius = 8f, center = start)
+        drawCircle(color = Color(0x6610B981), radius = 22f, center = start)
+        drawCircle(color = Color(0xFFF0FDF8), radius = 8f, center = start)
 
-        val arrowColor = Color(0xFF60A5FA)
+        val arrowColor = Color(0xFF34D399)
         drawLine(arrowColor, start, end, strokeWidth = 5f, cap = StrokeCap.Round)
         val dx = x1 - x0
         val dy = y1 - y0
@@ -787,12 +1023,12 @@ class SimulationCanvas {
 
     fun computeVisualRadius(b: RenderBody, physPx: Float): Float {
         if (b.isLightweight) {
-            return max(physPx, if (b.type == BodyType.STAR) 2.8f else 2.2f).coerceAtMost(28f)
+            return max(physPx, if (b.type == BodyType.STAR) 2.9f else 2.2f).coerceAtMost(28f)
         }
         val minPx = when (b.type) {
             BodyType.STAR -> 13f
-            BodyType.BLACK_HOLE -> 12f
-            BodyType.PLANET -> 7.0f
+            BodyType.BLACK_HOLE -> 12.5f
+            BodyType.PLANET -> 7.2f
             BodyType.COMET -> 4.8f
             BodyType.MOON -> 3.8f
             BodyType.ASTEROID -> 4.0f
@@ -816,6 +1052,7 @@ fun SimulationCanvas(
     camera: CameraState,
     selectedBodyId: Long?,
     showGrid: Boolean,
+    showGravityGrid: Boolean,
     showTrails: Boolean,
     showLabels: Boolean,
     showHabitableZone: Boolean,
@@ -829,6 +1066,7 @@ fun SimulationCanvas(
     modifier: Modifier = Modifier
 ) {
     val renderer = remember { SimulationCanvas() }
+    val nebulaBitmap = ImageBitmap.imageResource(id = R.drawable.img_emerald_nebula)
     Canvas(modifier = modifier.fillMaxSize()) {
         with(renderer) {
             render(
@@ -836,6 +1074,7 @@ fun SimulationCanvas(
                 camera = camera,
                 selectedBodyId = selectedBodyId,
                 showGrid = showGrid,
+                showGravityGrid = showGravityGrid,
                 showTrails = showTrails,
                 showLabels = showLabels,
                 showHabitableZone = showHabitableZone,
@@ -845,7 +1084,8 @@ fun SimulationCanvas(
                 launchEndScreenX = launchEndScreenX,
                 launchEndScreenY = launchEndScreenY,
                 launchSpeedLabel = launchSpeedLabel,
-                predictedPointsWorld = predictedPointsWorld
+                predictedPointsWorld = predictedPointsWorld,
+                backdropBitmap = nebulaBitmap
             )
         }
     }

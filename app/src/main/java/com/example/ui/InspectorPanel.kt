@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.CenterFocusStrong
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.GpsFixed
+import androidx.compose.material.icons.filled.Whatshot
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
@@ -46,9 +47,9 @@ import com.example.physics.BodyType
 import com.example.physics.PhysicsUnits
 import com.example.physics.SelectedBodyTelemetry
 import com.example.ui.theme.AlertRed
-import com.example.ui.theme.ElectricBlue
-import com.example.ui.theme.ElectricBlueBright
-import com.example.ui.theme.ElectricBlueContainer
+import com.example.ui.theme.EmeraldAccent
+import com.example.ui.theme.EmeraldBright
+import com.example.ui.theme.EmeraldContainer
 import com.example.ui.theme.SolarAmber
 import com.example.ui.theme.SpaceBorder
 import com.example.ui.theme.SpaceMutedText
@@ -69,6 +70,7 @@ fun InspectorPanel(
     isFollowing: Boolean,
     onToggleFollow: () -> Unit,
     onCenter: () -> Unit,
+    onDetonate: () -> Unit,
     onDelete: () -> Unit,
     onClose: () -> Unit,
     onMassChange: (Double) -> Unit,
@@ -137,7 +139,7 @@ fun InspectorPanel(
                 }
             }
 
-            // Основные действия камеры и удаление (>= 48dp)
+            // Основные действия камеры, детонация и удаление (>= 48dp)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -150,7 +152,7 @@ fun InspectorPanel(
                         .testTag("follow_body_button"),
                     contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp),
                     colors = ButtonDefaults.filledTonalButtonColors(
-                        containerColor = if (isFollowing) ElectricBlue else ElectricBlueContainer,
+                        containerColor = if (isFollowing) EmeraldAccent else EmeraldContainer,
                         contentColor = SpaceWhite
                     )
                 ) {
@@ -173,10 +175,26 @@ fun InspectorPanel(
                         Icons.Default.CenterFocusStrong,
                         contentDescription = null,
                         modifier = Modifier.size(18.dp),
-                        tint = ElectricBlueBright
+                        tint = EmeraldBright
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text("Центр", maxLines = 1)
+                }
+
+                OutlinedButton(
+                    onClick = onDetonate,
+                    modifier = Modifier
+                        .heightIn(min = 48.dp)
+                        .testTag("detonate_body_button"),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                    border = BorderStroke(1.dp, SolarAmber.copy(alpha = 0.7f)),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = SolarAmber)
+                ) {
+                    Icon(
+                        Icons.Default.Whatshot,
+                        contentDescription = if (telemetry.type == BodyType.STAR) "Сверхновая" else "Взорвать",
+                        modifier = Modifier.size(18.dp)
+                    )
                 }
 
                 OutlinedButton(
@@ -222,12 +240,11 @@ fun InspectorPanel(
                 if (telemetry.type == BodyType.PLANET) {
                     OutlinedButton(
                         onClick = onToggleRings,
-                        modifier = Modifier
-                            .heightIn(min = 48.dp),
+                        modifier = Modifier.heightIn(min = 48.dp),
                         contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
-                        border = BorderStroke(1.dp, if (telemetry.hasRings) ElectricBlue else SpaceBorder),
+                        border = BorderStroke(1.dp, if (telemetry.hasRings) EmeraldAccent else SpaceBorder),
                         colors = ButtonDefaults.outlinedButtonColors(
-                            contentColor = if (telemetry.hasRings) ElectricBlueBright else SpaceMutedText
+                            contentColor = if (telemetry.hasRings) EmeraldBright else SpaceMutedText
                         )
                     ) {
                         Text("Кольца", style = MaterialTheme.typography.labelMedium, maxLines = 1)
@@ -288,7 +305,7 @@ fun InspectorPanel(
                     Text(
                         text = PhysicsUnits.formatMass(telemetry.massKg),
                         style = MaterialTheme.typography.labelMedium,
-                        color = ElectricBlueBright
+                        color = EmeraldBright
                     )
                 }
                 Slider(
@@ -302,8 +319,8 @@ fun InspectorPanel(
                         .height(36.dp)
                         .testTag("mass_slider"),
                     colors = SliderDefaults.colors(
-                        thumbColor = ElectricBlueBright,
-                        activeTrackColor = ElectricBlue,
+                        thumbColor = EmeraldBright,
+                        activeTrackColor = EmeraldAccent,
                         inactiveTrackColor = SpaceBorder
                     )
                 )
@@ -319,7 +336,7 @@ fun InspectorPanel(
                     Text(
                         text = PhysicsUnits.formatRadius(telemetry.radiusM),
                         style = MaterialTheme.typography.labelMedium,
-                        color = ElectricBlueBright
+                        color = EmeraldBright
                     )
                 }
                 Slider(
@@ -333,8 +350,8 @@ fun InspectorPanel(
                         .height(36.dp)
                         .testTag("radius_slider"),
                     colors = SliderDefaults.colors(
-                        thumbColor = ElectricBlueBright,
-                        activeTrackColor = ElectricBlue,
+                        thumbColor = EmeraldBright,
+                        activeTrackColor = EmeraldAccent,
                         inactiveTrackColor = SpaceBorder
                     )
                 )

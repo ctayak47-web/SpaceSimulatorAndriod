@@ -2,19 +2,19 @@ package com.example.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// Минималистичная палитра: чистый чёрный фон, белый текст, синий акцент
-val SpaceBlack = Color(0xFF000000)
-val SpaceSurface = Color(0xFF0B101B)
-val SpaceSurfaceElevated = Color(0xFF131B2E)
-val SpaceBorder = Color(0xFF23304C)
+// Тёмно-зелёная космическая цветокоррекция (Deep Obsidian Emerald)
+val SpaceBlack = Color(0xFF010806)
+val SpaceSurface = Color(0xFF061510)
+val SpaceSurfaceElevated = Color(0xFF0B231A)
+val SpaceBorder = Color(0xFF164837)
 
-val SpaceWhite = Color(0xFFF8FAFC)
-val SpaceMutedText = Color(0xFF94A3B8)
+val SpaceWhite = Color(0xFFF0FDF8)
+val SpaceMutedText = Color(0xFF8FB8A8)
 
-val ElectricBlue = Color(0xFF3B82F6)
-val ElectricBlueBright = Color(0xFF60A5FA)
-val ElectricBlueContainer = Color(0xFF172554)
+val EmeraldAccent = Color(0xFF10B981)
+val EmeraldBright = Color(0xFF34D399)
+val EmeraldContainer = Color(0xFF064E3B)
 
 val AlertRed = Color(0xFFEF4444)
 val SolarAmber = Color(0xFFF59E0B)
-val OrbitalCyan = Color(0xFF22D3EE)
+val OrbitalCyan = Color(0xFF2DD4BF)

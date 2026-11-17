@@ -51,10 +51,11 @@ import com.example.physics.CollisionEvent
 import com.example.physics.PhysicsEngine
 import com.example.physics.PhysicsUnits
 import com.example.ui.theme.AlertRed
-import com.example.ui.theme.ElectricBlue
-import com.example.ui.theme.ElectricBlueBright
-import com.example.ui.theme.ElectricBlueContainer
+import com.example.ui.theme.EmeraldAccent
+import com.example.ui.theme.EmeraldBright
+import com.example.ui.theme.EmeraldContainer
 import com.example.ui.theme.SolarAmber
+import com.example.ui.theme.SpaceBlack
 import com.example.ui.theme.SpaceBorder
 import com.example.ui.theme.SpaceMutedText
 import com.example.ui.theme.SpaceSurface
@@ -91,7 +92,7 @@ fun TopHudBar(
                         timeState.isPaused
                     ),
                     style = MaterialTheme.typography.labelLarge,
-                    color = if (timeState.isReversed) SolarAmber else ElectricBlueBright,
+                    color = if (timeState.isReversed) SolarAmber else EmeraldBright,
                     maxLines = 1
                 )
                 Text(
@@ -152,8 +153,8 @@ private fun HudIconButton(
 ) {
     Surface(
         shape = CircleShape,
-        color = if (highlighted) ElectricBlueContainer else SpaceSurface.copy(alpha = 0.88f),
-        border = BorderStroke(1.dp, if (highlighted) ElectricBlue else SpaceBorder)
+        color = if (highlighted) EmeraldContainer else SpaceSurface.copy(alpha = 0.88f),
+        border = BorderStroke(1.dp, if (highlighted) EmeraldAccent else SpaceBorder)
     ) {
         IconButton(
             onClick = onClick,
@@ -161,7 +162,7 @@ private fun HudIconButton(
                 .size(48.dp)
                 .testTag(tag),
             colors = IconButtonDefaults.iconButtonColors(
-                contentColor = if (highlighted) ElectricBlueBright else SpaceWhite
+                contentColor = if (highlighted) EmeraldBright else SpaceWhite
             )
         ) {
             Icon(imageVector = icon, contentDescription = contentDescription)
@@ -243,8 +244,8 @@ fun LaunchModeBanner(
 ) {
     Surface(
         shape = RoundedCornerShape(16.dp),
-        color = ElectricBlueContainer.copy(alpha = 0.95f),
-        border = BorderStroke(1.dp, ElectricBlue),
+        color = EmeraldContainer.copy(alpha = 0.95f),
+        border = BorderStroke(1.dp, EmeraldAccent),
         modifier = modifier
             .fillMaxWidth()
             .testTag("launch_mode_banner")
@@ -263,7 +264,7 @@ fun LaunchModeBanner(
                 Text(
                     text = "Коснитесь космоса и потяните стрелку, чтобы задать скорость",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = ElectricBlueBright
+                    color = EmeraldBright
                 )
             }
             Spacer(modifier = Modifier.width(8.dp))
@@ -272,7 +273,7 @@ fun LaunchModeBanner(
                 modifier = Modifier
                     .heightIn(min = 48.dp)
                     .testTag("cancel_launch_button"),
-                border = BorderStroke(1.dp, ElectricBlueBright),
+                border = BorderStroke(1.dp, EmeraldBright),
                 colors = ButtonDefaults.outlinedButtonColors(contentColor = SpaceWhite)
             ) {
                 Text("Отмена")
@@ -312,7 +313,7 @@ fun BottomTimeAndAddBar(
                 ) {
                     Surface(
                         shape = CircleShape,
-                        color = if (timeState.isReversed) SolarAmber.copy(alpha = 0.22f) else ElectricBlueContainer.copy(alpha = 0.45f),
+                        color = if (timeState.isReversed) SolarAmber.copy(alpha = 0.22f) else EmeraldContainer.copy(alpha = 0.55f),
                         border = BorderStroke(1.dp, if (timeState.isReversed) SolarAmber else SpaceBorder)
                     ) {
                         IconButton(
@@ -331,8 +332,8 @@ fun BottomTimeAndAddBar(
 
                     Surface(
                         shape = CircleShape,
-                        color = ElectricBlue,
-                        border = BorderStroke(1.dp, ElectricBlueBright)
+                        color = EmeraldAccent,
+                        border = BorderStroke(1.dp, EmeraldBright)
                     ) {
                         IconButton(
                             onClick = onTogglePause,
@@ -343,7 +344,7 @@ fun BottomTimeAndAddBar(
                             Icon(
                                 imageVector = if (timeState.isPaused) Icons.Default.PlayArrow else Icons.Default.Pause,
                                 contentDescription = if (timeState.isPaused) "Запустить" else "Пауза",
-                                tint = SpaceWhite
+                                tint = SpaceBlack
                             )
                         }
                     }
@@ -380,8 +381,8 @@ fun BottomTimeAndAddBar(
                         .height(34.dp)
                         .testTag("time_speed_slider"),
                     colors = SliderDefaults.colors(
-                        thumbColor = ElectricBlueBright,
-                        activeTrackColor = ElectricBlue,
+                        thumbColor = EmeraldBright,
+                        activeTrackColor = EmeraldAccent,
                         inactiveTrackColor = SpaceBorder
                     )
                 )
@@ -394,8 +395,8 @@ fun BottomTimeAndAddBar(
                 .size(58.dp)
                 .testTag("add_body_fab"),
             shape = CircleShape,
-            containerColor = ElectricBlue,
-            contentColor = SpaceWhite
+            containerColor = EmeraldAccent,
+            contentColor = SpaceBlack
         ) {
             Icon(
                 imageVector = Icons.Default.Add,
